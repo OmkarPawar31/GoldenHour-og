@@ -2,6 +2,7 @@ import { Router } from "express";
 import {
   createEmergency,
   getEmergency,
+  getActiveEmergencies,
   updateEmergency,
   resolveEmergency,
 } from "../controllers/emergency.controller";
@@ -11,6 +12,7 @@ const router = Router();
 
 router.use(authMiddleware);
 router.post("/", createEmergency);
+router.get("/active", getActiveEmergencies);
 router.get("/:id", getEmergency);
 router.put("/:id", updateEmergency);
 router.patch("/:id/resolve", resolveEmergency);

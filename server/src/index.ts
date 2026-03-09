@@ -8,6 +8,7 @@ import authRoutes from "./routes/auth.routes";
 import emergencyRoutes from "./routes/emergency.routes";
 import userRoutes from "./routes/user.routes";
 import adminRoutes from "./routes/admin.routes";
+import trackingRoutes from "./routes/tracking.routes";
 import { errorHandler } from "./middleware/error.middleware";
 
 const app = express();
@@ -21,6 +22,7 @@ app.use("/api/auth", authRoutes);
 app.use("/api/emergency", emergencyRoutes);
 app.use("/api/users", userRoutes);
 app.use("/api/admin", adminRoutes);
+app.use("/api/tracking", trackingRoutes);
 
 // Error handler
 app.use(errorHandler);
