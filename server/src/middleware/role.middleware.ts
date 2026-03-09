@@ -1,11 +1,11 @@
-import { Request, Response, NextFunction } from "express";
+import { Response, NextFunction } from "express";
+import { AuthRequest } from "./auth.middleware";
 
 export function roleMiddleware(...roles: string[]) {
-  return (req: Request, res: Response, next: NextFunction) => {
-    // TODO: Extract user role from token/request
-    const userRole = "user"; // placeholder
+  return (req: AuthRequest, res: Response, next: NextFunction) => {
+    const userRole = req.user?.role;
 
-    if (!roles.includes(userRole)) {
+    if (!userRole || !roles.includes(userRole)) {
       return res.status(403).json({ message: "Insufficient permissions" });
     }
 
