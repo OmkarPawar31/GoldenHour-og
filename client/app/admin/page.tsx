@@ -75,8 +75,8 @@ export default function AdminPage() {
   }, [loadOverview]);
 
   useEffect(() => {
-    if (tab === "users" && users.length === 0) loadUsers().catch(() => {});
-    if (tab === "sessions") loadSessions().catch(() => {});
+    if (tab === "users" && users.length === 0) loadUsers().catch(() => { });
+    if (tab === "sessions") loadSessions().catch(() => { });
   }, [tab, loadUsers, loadSessions, users.length]);
 
   function handleLogout() {
@@ -89,78 +89,212 @@ export default function AdminPage() {
   return (
     <>
       <style>{`
+        @import url('https://fonts.googleapis.com/css2?family=DM+Sans:wght@300;400;500;700&family=JetBrains+Mono:wght@400;600&display=swap');
+
         * { margin: 0; padding: 0; box-sizing: border-box; }
-        body { background: #060e1c; }
-        .adm-wrap {
-          min-height: 100vh; background: linear-gradient(135deg, #060e1c 0%, #0a1628 50%, #0d1f3c 100%);
-          color: #c8d6e5; font-family: 'Inter', system-ui, sans-serif;
+
+        :root {
+          --orange:  #E8571A;
+          --orange2: #F97316;
+          --amber:   #F59E0B;
+          --cream:   #FFFBF5;
+          --warm:    #FFF7ED;
+          --slate:   #F1F5F9;
+          --text:    #1E293B;
+          --muted:   #64748B;
+          --border:  #E2E8F0;
+          --green:   #10B981;
+          --blue:    #3B82F6;
+          --red:     #EF4444;
         }
+
+        body {
+          background: var(--cream);
+          font-family: 'DM Sans', system-ui, sans-serif;
+          color: var(--text);
+        }
+
+        .adm-wrap {
+          min-height: 100vh;
+          background: var(--cream);
+        }
+
+        /* Topbar */
         .adm-topbar {
           display: flex; align-items: center; justify-content: space-between;
-          padding: 20px 32px; border-bottom: 1px solid rgba(255,255,255,0.06);
-          background: rgba(6,14,28,0.8); backdrop-filter: blur(20px);
+          padding: 0 32px; height: 64px;
+          background: #fff;
+          border-bottom: 1px solid var(--border);
+          box-shadow: 0 1px 8px rgba(0,0,0,0.04);
+          position: sticky; top: 0; z-index: 50;
         }
-        .adm-topbar h1 { font-size: 1.5rem; color: #f0c040; font-weight: 700; }
-        .adm-topbar-actions { display: flex; gap: 12px; align-items: center; }
+        .adm-logo {
+          display: flex; align-items: center; gap: 10px;
+          font-family: 'DM Sans', sans-serif; font-weight: 800;
+          font-size: 1.1rem; color: var(--text); text-decoration: none;
+        }
+        .adm-logo-dot {
+          width: 10px; height: 10px; background: var(--orange);
+          border-radius: 50; box-shadow: 0 0 8px rgba(232,87,26,0.5);
+          animation: blink 2s ease-in-out infinite;
+        }
+        @keyframes blink { 0%,100%{opacity:1} 50%{opacity:0.4} }
+        .adm-logo span { color: var(--orange); }
+
+        .adm-topbar-actions { display: flex; gap: 10px; align-items: center; }
         .adm-topbar-actions a, .adm-topbar-actions button {
-          padding: 8px 18px; border-radius: 8px; font-size: 0.85rem; cursor: pointer;
-          border: 1px solid rgba(255,255,255,0.1); background: rgba(255,255,255,0.04);
-          color: #8a9bb5; text-decoration: none; transition: all 0.2s;
+          padding: 7px 16px; border-radius: 8px; font-size: 0.84rem; cursor: pointer;
+          border: 1.5px solid var(--border); background: #fff;
+          color: var(--muted); text-decoration: none;
+          transition: all 0.2s; font-family: 'DM Sans', sans-serif; font-weight: 500;
         }
-        .adm-topbar-actions a:hover, .adm-topbar-actions button:hover {
-          background: rgba(255,255,255,0.08); color: #fff;
+        .adm-topbar-actions a:hover { background: var(--warm); color: var(--orange); border-color: rgba(232,87,26,0.25); }
+        .adm-topbar-actions button:hover { background: rgba(239,68,68,0.06); color: var(--red); border-color: rgba(239,68,68,0.25); }
+
+        .adm-body { padding: 32px; max-width: 1280px; margin: 0 auto; }
+
+        /* Page title */
+        .adm-page-title {
+          font-size: 1.6rem; font-weight: 800; color: var(--text);
+          margin-bottom: 4px;
         }
-        .adm-body { padding: 32px; max-width: 1200px; margin: 0 auto; }
-        .adm-tabs { display: flex; gap: 8px; margin-bottom: 32px; }
+        .adm-page-sub { font-size: 0.88rem; color: var(--muted); margin-bottom: 28px; }
+
+        /* Tabs */
+        .adm-tabs {
+          display: flex; gap: 6px; margin-bottom: 32px;
+          background: #fff; padding: 5px; border-radius: 12px;
+          border: 1.5px solid var(--border); width: fit-content;
+          box-shadow: 0 1px 4px rgba(0,0,0,0.04);
+        }
         .adm-tab {
-          padding: 10px 22px; border-radius: 8px; font-size: 0.9rem; cursor: pointer;
-          border: 1px solid rgba(255,255,255,0.08); background: rgba(255,255,255,0.03);
-          color: #8a9bb5; transition: all 0.2s;
+          padding: 9px 22px; border-radius: 8px; font-size: 0.88rem; cursor: pointer;
+          border: none; background: transparent;
+          color: var(--muted); transition: all 0.25s;
+          font-family: 'DM Sans', sans-serif; font-weight: 500;
         }
-        .adm-tab:hover { background: rgba(255,255,255,0.06); color: #fff; }
-        .adm-tab.active { background: rgba(240,192,64,0.12); border-color: rgba(240,192,64,0.3); color: #f0c040; }
-        .adm-cards { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 20px; margin-bottom: 40px; }
+        .adm-tab:hover { background: var(--slate); color: var(--text); }
+        .adm-tab.active {
+          background: var(--orange); color: #fff; font-weight: 700;
+          box-shadow: 0 2px 12px rgba(232,87,26,0.3);
+        }
+
+        /* Stat cards */
+        .adm-cards { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 20px; margin-bottom: 36px; }
         .adm-card {
-          background: rgba(255,255,255,0.03); border: 1px solid rgba(255,255,255,0.06);
-          border-radius: 14px; padding: 28px; text-align: center;
+          background: #fff; border: 1.5px solid var(--border);
+          border-radius: 16px; padding: 24px;
+          display: flex; align-items: center; gap: 16px;
+          box-shadow: 0 2px 12px rgba(0,0,0,0.04);
+          transition: all 0.3s;
         }
-        .adm-card-value { font-size: 2.5rem; font-weight: 800; }
-        .adm-card-label { font-size: 0.85rem; color: #6b7c93; margin-top: 4px; }
-        .adm-section-title { font-size: 1.1rem; font-weight: 600; color: #fff; margin-bottom: 16px; }
-        .adm-table-wrap { overflow-x: auto; }
+        .adm-card:hover { transform: translateY(-3px); box-shadow: 0 8px 32px rgba(0,0,0,0.08); }
+        .adm-card-icon {
+          width: 52px; height: 52px; border-radius: 14px;
+          display: flex; align-items: center; justify-content: center;
+          font-size: 1.5rem; flex-shrink: 0;
+        }
+        .adm-card-value { font-size: 2rem; font-weight: 800; line-height: 1; }
+        .adm-card-label { font-size: 0.82rem; color: var(--muted); margin-top: 4px; }
+
+        /* Section heading */
+        .adm-section-title {
+          font-size: 1rem; font-weight: 700; color: var(--text); margin-bottom: 16px;
+          display: flex; align-items: center; gap: 8px;
+        }
+        .adm-section-title::before {
+          content: ''; width: 3px; height: 18px;
+          background: var(--orange); border-radius: 2px; display: block;
+        }
+
+        /* Table */
+        .adm-table-wrap {
+          background: #fff; border: 1.5px solid var(--border);
+          border-radius: 16px; overflow: hidden;
+          box-shadow: 0 2px 12px rgba(0,0,0,0.04);
+          overflow-x: auto;
+        }
         .adm-table { width: 100%; border-collapse: collapse; min-width: 600px; }
         .adm-table th {
-          text-align: left; padding: 10px 14px; font-size: 0.8rem; color: #6b7c93;
-          text-transform: uppercase; letter-spacing: 0.5px;
-          border-bottom: 1px solid rgba(255,255,255,0.06);
+          text-align: left; padding: 12px 18px; font-size: 0.75rem; color: var(--muted);
+          text-transform: uppercase; letter-spacing: 0.08em; font-weight: 700;
+          border-bottom: 1.5px solid var(--border);
+          background: var(--slate);
+          font-family: 'JetBrains Mono', monospace;
         }
-        .adm-table td { padding: 12px 14px; font-size: 0.9rem; border-bottom: 1px solid rgba(255,255,255,0.03); }
+        .adm-table td {
+          padding: 14px 18px; font-size: 0.88rem;
+          border-bottom: 1px solid rgba(226,232,240,0.6);
+          transition: background 0.15s;
+        }
+        .adm-table tbody tr:hover td { background: var(--warm); }
+        .adm-table tbody tr:last-child td { border-bottom: none; }
+
+        /* Badges */
         .status-badge {
-          display: inline-block; padding: 3px 10px; border-radius: 20px; font-size: 0.78rem; font-weight: 600;
+          display: inline-flex; align-items: center; gap: 5px;
+          padding: 4px 10px; border-radius: 20px; font-size: 0.75rem; font-weight: 700;
+          font-family: 'JetBrains Mono', monospace; letter-spacing: 0.04em;
         }
-        .status-active { background: rgba(0,200,83,0.12); color: #00c853; }
-        .status-pending { background: rgba(240,192,64,0.12); color: #f0c040; }
-        .status-resolved { background: rgba(138,155,181,0.12); color: #8a9bb5; }
+        .status-badge::before { content:''; width:6px;height:6px;border-radius:50%;flex-shrink:0; }
+        .status-active { background: rgba(16,185,129,0.1); color: #059669; }
+        .status-active::before { background: #059669; }
+        .status-pending { background: rgba(245,158,11,0.1); color: #D97706; }
+        .status-pending::before { background: #D97706; }
+        .status-resolved { background: rgba(100,116,147,0.1); color: var(--muted); }
+        .status-resolved::before { background: var(--muted); }
+
         .role-badge {
-          display: inline-block; padding: 3px 10px; border-radius: 20px; font-size: 0.78rem; font-weight: 600;
-          background: rgba(100,149,237,0.12); color: #6495ed;
+          display: inline-block; padding: 4px 10px; border-radius: 6px; font-size: 0.75rem; font-weight: 700;
+          background: rgba(59,130,246,0.08); color: #2563EB;
+          font-family: 'JetBrains Mono', monospace;
         }
-        .role-admin { background: rgba(240,192,64,0.12); color: #f0c040; }
-        .adm-filter { display: flex; gap: 8px; margin-bottom: 20px; align-items: center; }
+        .role-admin { background: rgba(232,87,26,0.1); color: var(--orange); }
+
+        /* Filter */
+        .adm-filter { display: flex; gap: 10px; margin-bottom: 20px; align-items: center; }
+        .adm-filter label { font-size: 0.83rem; color: var(--muted); font-weight: 500; }
         .adm-filter select {
           padding: 8px 14px; border-radius: 8px; font-size: 0.85rem;
-          background: rgba(255,255,255,0.05); border: 1px solid rgba(255,255,255,0.1);
-          color: #c8d6e5; cursor: pointer;
+          background: #fff; border: 1.5px solid var(--border);
+          color: var(--text); cursor: pointer; outline: none;
+          font-family: 'DM Sans', sans-serif;
+          transition: border-color 0.2s;
         }
-        .adm-filter select option { background: #0a1628; }
-        .adm-empty { text-align: center; padding: 40px; color: #6b7c93; }
-        .adm-error { text-align: center; padding: 60px; color: #e74c3c; font-size: 1rem; }
-        .adm-loading { text-align: center; padding: 80px; color: #6b7c93; }
+        .adm-filter select:focus { border-color: var(--orange); }
+
+        .adm-empty {
+          text-align: center; padding: 48px; color: var(--muted);
+          font-size: 0.9rem; background: #fff; border-radius: 12px;
+          border: 1.5px solid var(--border);
+        }
+        .adm-error {
+          text-align: center; padding: 60px; color: var(--red);
+          font-size: 1rem; background: rgba(239,68,68,0.05);
+          border-radius: 16px; border: 1.5px solid rgba(239,68,68,0.15);
+        }
+        .adm-loading {
+          text-align: center; padding: 80px; color: var(--muted);
+          display: flex; flex-direction: column; align-items: center; gap: 16px;
+        }
+        .loading-spinner {
+          width: 36px; height: 36px; border-radius: 50%;
+          border: 3px solid rgba(232,87,26,0.15);
+          border-top-color: var(--orange);
+          animation: spin 0.8s linear infinite;
+        }
+        @keyframes spin { to { transform: rotate(360deg); } }
+
+        /* Mono text */
+        .mono { font-family: 'JetBrains Mono', monospace; font-size: 0.82rem; color: var(--muted); }
       `}</style>
 
       <div className="adm-wrap">
         <div className="adm-topbar">
-          <h1>⏱ GoldenHour Admin</h1>
+          <Link href="/" className="adm-logo">
+            <div className="adm-logo-dot" />
+            Golden<span>Hour</span>&nbsp;Admin
+          </Link>
           <div className="adm-topbar-actions">
             <Link href="/dashboard">Dashboard</Link>
             <Link href="/">Home</Link>
@@ -170,27 +304,33 @@ export default function AdminPage() {
 
         <div className="adm-body">
           {loading ? (
-            <div className="adm-loading">Loading admin panel...</div>
+            <div className="adm-loading">
+              <div className="loading-spinner" />
+              Loading admin panel...
+            </div>
           ) : error ? (
             <div className="adm-error">
               {error}
               {error === "Not logged in" && (
                 <div style={{ marginTop: 16 }}>
-                  <Link href="/auth" style={{ color: "#f0c040" }}>Go to Login</Link>
+                  <Link href="/auth" style={{ color: "var(--orange)", fontWeight: 600 }}>Go to Login →</Link>
                 </div>
               )}
             </div>
           ) : (
             <>
+              <div className="adm-page-title">Admin War Room</div>
+              <div className="adm-page-sub">Monitor active emergencies, users, and corridor sessions in real time.</div>
+
               <div className="adm-tabs">
                 <button className={`adm-tab ${tab === "overview" ? "active" : ""}`} onClick={() => setTab("overview")}>
-                  Overview
+                  📊 Overview
                 </button>
                 <button className={`adm-tab ${tab === "users" ? "active" : ""}`} onClick={() => setTab("users")}>
-                  Users
+                  👥 Users
                 </button>
                 <button className={`adm-tab ${tab === "sessions" ? "active" : ""}`} onClick={() => setTab("sessions")}>
-                  Sessions
+                  🚨 Sessions
                 </button>
               </div>
 
@@ -199,22 +339,31 @@ export default function AdminPage() {
                 <>
                   <div className="adm-cards">
                     <div className="adm-card">
-                      <div className="adm-card-value" style={{ color: "#e74c3c" }}>
-                        {dashboard.activeEmergencies}
+                      <div className="adm-card-icon" style={{ background: "rgba(239,68,68,0.1)" }}>🚨</div>
+                      <div>
+                        <div className="adm-card-value" style={{ color: "var(--red)" }}>
+                          {dashboard.activeEmergencies}
+                        </div>
+                        <div className="adm-card-label">Active Emergencies</div>
                       </div>
-                      <div className="adm-card-label">Active Emergencies</div>
                     </div>
                     <div className="adm-card">
-                      <div className="adm-card-value" style={{ color: "#6495ed" }}>
-                        {dashboard.totalUsers}
+                      <div className="adm-card-icon" style={{ background: "rgba(59,130,246,0.1)" }}>👥</div>
+                      <div>
+                        <div className="adm-card-value" style={{ color: "var(--blue)" }}>
+                          {dashboard.totalUsers}
+                        </div>
+                        <div className="adm-card-label">Total Users</div>
                       </div>
-                      <div className="adm-card-label">Total Users</div>
                     </div>
                     <div className="adm-card">
-                      <div className="adm-card-value" style={{ color: "#00c853" }}>
-                        {dashboard.availableVehicles}
+                      <div className="adm-card-icon" style={{ background: "rgba(16,185,129,0.1)" }}>🚑</div>
+                      <div>
+                        <div className="adm-card-value" style={{ color: "var(--green)" }}>
+                          {dashboard.availableVehicles}
+                        </div>
+                        <div className="adm-card-label">Available Vehicles</div>
                       </div>
-                      <div className="adm-card-label">Available Vehicles</div>
                     </div>
                   </div>
 
@@ -236,15 +385,13 @@ export default function AdminPage() {
                         <tbody>
                           {dashboard.recentSessions.map((s) => (
                             <tr key={s._id}>
-                              <td style={{ fontFamily: "monospace", fontSize: "0.82rem" }}>
-                                {s._id.slice(-8)}
-                              </td>
+                              <td className="mono">{s._id.slice(-8)}</td>
                               <td>{s.userId?.name || "—"}</td>
                               <td>
                                 <span className={`status-badge status-${s.status}`}>{s.status}</span>
                               </td>
-                              <td>P{s.priority}</td>
-                              <td>{new Date(s.createdAt).toLocaleString()}</td>
+                              <td><span className="mono">P{s.priority}</span></td>
+                              <td className="mono">{new Date(s.createdAt).toLocaleString()}</td>
                             </tr>
                           ))}
                         </tbody>
@@ -275,15 +422,15 @@ export default function AdminPage() {
                         <tbody>
                           {users.map((u) => (
                             <tr key={u._id}>
-                              <td>{u.name}</td>
-                              <td>{u.email}</td>
+                              <td style={{ fontWeight: 600 }}>{u.name}</td>
+                              <td className="mono">{u.email}</td>
                               <td>
                                 <span className={`role-badge ${u.role === "admin" ? "role-admin" : ""}`}>
                                   {u.role}
                                 </span>
                               </td>
-                              <td>{u.phone || "—"}</td>
-                              <td>{new Date(u.createdAt).toLocaleDateString()}</td>
+                              <td className="mono">{u.phone || "—"}</td>
+                              <td className="mono">{new Date(u.createdAt).toLocaleDateString()}</td>
                             </tr>
                           ))}
                         </tbody>
@@ -297,7 +444,7 @@ export default function AdminPage() {
               {tab === "sessions" && (
                 <>
                   <div className="adm-filter">
-                    <span style={{ color: "#6b7c93", fontSize: "0.85rem" }}>Filter:</span>
+                    <label>Filter by status:</label>
                     <select value={statusFilter} onChange={(e) => setStatusFilter(e.target.value)}>
                       <option value="">All statuses</option>
                       <option value="pending">Pending</option>
@@ -325,17 +472,15 @@ export default function AdminPage() {
                         <tbody>
                           {sessions.map((s) => (
                             <tr key={s._id}>
-                              <td style={{ fontFamily: "monospace", fontSize: "0.82rem" }}>
-                                {s._id.slice(-8)}
-                              </td>
+                              <td className="mono">{s._id.slice(-8)}</td>
                               <td>{s.userId?.name || "—"}</td>
                               <td>
                                 <span className={`status-badge status-${s.status}`}>{s.status}</span>
                               </td>
-                              <td>P{s.priority}</td>
+                              <td><span className="mono">P{s.priority}</span></td>
                               <td>{s.vehicleId?.type || "—"}</td>
-                              <td>{new Date(s.createdAt).toLocaleString()}</td>
-                              <td>{s.resolvedAt ? new Date(s.resolvedAt).toLocaleString() : "—"}</td>
+                              <td className="mono">{new Date(s.createdAt).toLocaleString()}</td>
+                              <td className="mono">{s.resolvedAt ? new Date(s.resolvedAt).toLocaleString() : "—"}</td>
                             </tr>
                           ))}
                         </tbody>

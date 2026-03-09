@@ -1,1 +1,20 @@
 @import "tailwindcss";
+
+/* Light Theme Global Overrides */
+:root {
+  --gh-orange: #E8571A;
+  --gh-amber: #F59E0B;
+  --gh-cream: #FFFBF5;
+  --gh-warm: #FFF7ED;
+  --gh-slate: #F1F5F9;
+  --gh-text: #1E293B;
+  --gh-muted: #64748B;
+  --gh-border: #E2E8F0;
+  --gh-card: #FFFFFF;
+  --gh-green: #10B981;
+  --gh-blue: #3B82F6;
+  --gh-red: #EF4444;
+}
+
+* { box-sizing: border-box; margin: 0; padding: 0; }
+html { scroll-behavior: smooth; }

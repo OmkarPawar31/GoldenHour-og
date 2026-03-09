@@ -64,77 +64,217 @@ export default function DashboardPage() {
   }
 
   const role = typeof window !== "undefined" ? localStorage.getItem("gh_role") || "user" : "user";
-
   const activeSessions = sessions.filter((s) => s.status === "active" || s.status === "pending");
+
+  const roleColors: Record<string, string> = {
+    ambulance: "#E8571A",
+    admin: "#10B981",
+    private: "#F59E0B",
+    driver: "#3B82F6",
+    user: "#64748B",
+  };
+  const roleColor = roleColors[role] || "#64748B";
 
   return (
     <>
       <style>{`
+        @import url('https://fonts.googleapis.com/css2?family=DM+Sans:wght@300;400;500;700;800&family=JetBrains+Mono:wght@400;600&display=swap');
+
         * { margin: 0; padding: 0; box-sizing: border-box; }
-        body { background: #060e1c; }
-        .dash-wrap {
-          min-height: 100vh; background: linear-gradient(135deg, #060e1c 0%, #0a1628 50%, #0d1f3c 100%);
-          color: #c8d6e5; font-family: 'Inter', system-ui, sans-serif;
+
+        :root {
+          --orange:  #E8571A;
+          --orange2: #F97316;
+          --amber:   #F59E0B;
+          --cream:   #FFFBF5;
+          --warm:    #FFF7ED;
+          --slate:   #F1F5F9;
+          --text:    #1E293B;
+          --muted:   #64748B;
+          --border:  #E2E8F0;
+          --green:   #10B981;
+          --blue:    #3B82F6;
+          --red:     #EF4444;
         }
+
+        body {
+          background: var(--cream);
+          font-family: 'DM Sans', system-ui, sans-serif;
+          color: var(--text);
+        }
+
+        .dash-wrap { min-height: 100vh; background: var(--cream); }
+
+        /* Topbar */
         .dash-topbar {
           display: flex; align-items: center; justify-content: space-between;
-          padding: 20px 32px; border-bottom: 1px solid rgba(255,255,255,0.06);
-          background: rgba(6,14,28,0.8); backdrop-filter: blur(20px);
+          padding: 0 32px; height: 64px;
+          background: #fff;
+          border-bottom: 1px solid var(--border);
+          box-shadow: 0 1px 8px rgba(0,0,0,0.04);
+          position: sticky; top: 0; z-index: 50;
         }
-        .dash-topbar h1 { font-size: 1.5rem; color: #f0c040; font-weight: 700; }
-        .dash-topbar-actions { display: flex; gap: 12px; align-items: center; }
+        .dash-logo {
+          display: flex; align-items: center; gap: 10px;
+          font-weight: 800; font-size: 1.1rem; color: var(--text);
+          text-decoration: none;
+        }
+        .dash-logo-dot {
+          width: 10px; height: 10px; background: var(--orange);
+          border-radius: 50%; box-shadow: 0 0 8px rgba(232,87,26,0.5);
+          animation: blink 2s ease-in-out infinite;
+        }
+        @keyframes blink { 0%,100%{opacity:1} 50%{opacity:0.4} }
+        .dash-logo span { color: var(--orange); }
+
+        .dash-topbar-actions { display: flex; gap: 10px; align-items: center; }
         .dash-topbar-actions a, .dash-topbar-actions button {
-          padding: 8px 18px; border-radius: 8px; font-size: 0.85rem; cursor: pointer;
-          border: 1px solid rgba(255,255,255,0.1); background: rgba(255,255,255,0.04);
-          color: #8a9bb5; text-decoration: none; transition: all 0.2s;
+          padding: 7px 16px; border-radius: 8px; font-size: 0.84rem; cursor: pointer;
+          border: 1.5px solid var(--border); background: #fff;
+          color: var(--muted); text-decoration: none;
+          transition: all 0.2s; font-family: 'DM Sans', sans-serif; font-weight: 500;
         }
-        .dash-topbar-actions a:hover, .dash-topbar-actions button:hover {
-          background: rgba(255,255,255,0.08); color: #fff;
+        .dash-topbar-actions a:hover { background: var(--warm); color: var(--orange); border-color: rgba(232,87,26,0.25); }
+        .dash-topbar-actions button:hover { background: rgba(239,68,68,0.06); color: var(--red); border-color: rgba(239,68,68,0.2); }
+
+        .dash-body { padding: 36px 32px; max-width: 1100px; margin: 0 auto; }
+
+        /* Welcome banner */
+        .dash-welcome {
+          background: linear-gradient(135deg, #fff 0%, var(--warm) 100%);
+          border: 1.5px solid var(--border);
+          border-radius: 20px; padding: 28px 32px;
+          display: flex; align-items: center; justify-content: space-between;
+          margin-bottom: 28px;
+          box-shadow: 0 2px 16px rgba(232,87,26,0.06);
+          animation: fadeUp 0.5s ease both;
+          gap: 16px; flex-wrap: wrap;
         }
-        .dash-body { padding: 32px; max-width: 1100px; margin: 0 auto; }
-        .dash-greeting { font-size: 1.8rem; font-weight: 700; color: #fff; margin-bottom: 6px; }
-        .dash-role { font-size: 0.95rem; color: #6b7c93; margin-bottom: 32px; }
-        .dash-role span {
-          background: rgba(240,192,64,0.12); color: #f0c040; padding: 3px 10px;
-          border-radius: 20px; font-size: 0.82rem; margin-left: 8px;
+        @keyframes fadeUp { from{opacity:0;transform:translateY(16px)} to{opacity:1;transform:translateY(0)} }
+        .dash-welcome-left h1 { font-size: 1.75rem; font-weight: 800; color: var(--text); }
+        .dash-welcome-left h1 span { color: var(--orange); }
+        .dash-welcome-left p { font-size: 0.88rem; color: var(--muted); margin-top: 4px; }
+        .dash-role-badge {
+          display: inline-flex; align-items: center; gap: 6px;
+          padding: 6px 14px; border-radius: 100px;
+          font-family: 'JetBrains Mono', monospace; font-size: 0.72rem;
+          font-weight: 700; letter-spacing: 0.06em;
         }
-        .dash-cards { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 20px; margin-bottom: 40px; }
+        .dash-role-dot { width: 7px; height: 7px; border-radius: 50%; }
+
+        /* Stat cards */
+        .dash-cards {
+          display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+          gap: 18px; margin-bottom: 32px;
+        }
         .dash-card {
-          background: rgba(255,255,255,0.03); border: 1px solid rgba(255,255,255,0.06);
-          border-radius: 14px; padding: 24px; text-align: center;
+          background: #fff; border: 1.5px solid var(--border);
+          border-radius: 16px; padding: 22px;
+          box-shadow: 0 2px 8px rgba(0,0,0,0.04);
+          transition: all 0.3s; position: relative; overflow: hidden;
+          animation: fadeUp 0.5s ease both;
         }
-        .dash-card-value { font-size: 2.2rem; font-weight: 800; color: #f0c040; }
-        .dash-card-label { font-size: 0.85rem; color: #6b7c93; margin-top: 4px; }
-        .dash-section-title { font-size: 1.1rem; font-weight: 600; color: #fff; margin-bottom: 16px; }
-        .dash-quick-links { display: flex; gap: 16px; flex-wrap: wrap; margin-bottom: 40px; }
+        .dash-card:hover { transform: translateY(-4px); box-shadow: 0 10px 32px rgba(0,0,0,0.09); }
+        .dash-card::after {
+          content: ''; position: absolute; bottom: 0; left: 0; right: 0; height: 3px;
+          background: var(--card-color, var(--orange));
+          opacity: 0; transition: opacity 0.3s;
+        }
+        .dash-card:hover::after { opacity: 1; }
+        .dash-card-icon { font-size: 1.6rem; margin-bottom: 10px; }
+        .dash-card-value { font-size: 2.2rem; font-weight: 800; line-height: 1; }
+        .dash-card-label { font-size: 0.83rem; color: var(--muted); margin-top: 6px; }
+
+        /* Section title */
+        .dash-section-title {
+          font-size: 1rem; font-weight: 700; color: var(--text);
+          margin-bottom: 14px; display: flex; align-items: center; gap: 8px;
+        }
+        .dash-section-title::before {
+          content: ''; width: 3px; height: 16px;
+          background: var(--orange); border-radius: 2px; display: block;
+        }
+
+        /* Quick links */
+        .dash-quick-links { display: flex; gap: 14px; flex-wrap: wrap; margin-bottom: 32px; }
         .dash-quick-link {
-          display: flex; align-items: center; gap: 10px; padding: 16px 24px;
-          background: rgba(255,255,255,0.03); border: 1px solid rgba(255,255,255,0.06);
-          border-radius: 12px; color: #c8d6e5; text-decoration: none;
-          transition: all 0.2s; font-size: 0.95rem;
+          display: flex; align-items: center; gap: 10px; padding: 14px 22px;
+          background: #fff; border: 1.5px solid var(--border);
+          border-radius: 12px; color: var(--text); text-decoration: none;
+          transition: all 0.25s; font-size: 0.92rem; font-weight: 500;
+          box-shadow: 0 1px 4px rgba(0,0,0,0.04);
         }
-        .dash-quick-link:hover { background: rgba(240,192,64,0.08); border-color: rgba(240,192,64,0.2); color: #fff; }
+        .dash-quick-link:hover {
+          background: var(--warm); border-color: rgba(232,87,26,0.3);
+          color: var(--orange); transform: translateY(-2px);
+          box-shadow: 0 6px 20px rgba(232,87,26,0.1);
+        }
+
+        /* Table */
+        .dash-table-wrap {
+          background: #fff; border: 1.5px solid var(--border);
+          border-radius: 16px; overflow: hidden;
+          box-shadow: 0 2px 8px rgba(0,0,0,0.04);
+          overflow-x: auto;
+        }
         .dash-table { width: 100%; border-collapse: collapse; }
         .dash-table th {
-          text-align: left; padding: 10px 14px; font-size: 0.8rem; color: #6b7c93;
-          text-transform: uppercase; letter-spacing: 0.5px;
-          border-bottom: 1px solid rgba(255,255,255,0.06);
+          text-align: left; padding: 12px 18px; font-size: 0.73rem;
+          color: var(--muted); text-transform: uppercase; letter-spacing: 0.08em;
+          font-weight: 700; border-bottom: 1.5px solid var(--border);
+          background: var(--slate); font-family: 'JetBrains Mono', monospace;
         }
-        .dash-table td { padding: 12px 14px; font-size: 0.9rem; border-bottom: 1px solid rgba(255,255,255,0.03); }
+        .dash-table td {
+          padding: 14px 18px; font-size: 0.88rem;
+          border-bottom: 1px solid rgba(226,232,240,0.6);
+        }
+        .dash-table tbody tr:hover td { background: var(--warm); }
+        .dash-table tbody tr:last-child td { border-bottom: none; }
+
         .status-badge {
-          display: inline-block; padding: 3px 10px; border-radius: 20px; font-size: 0.78rem; font-weight: 600;
+          display: inline-flex; align-items: center; gap: 5px;
+          padding: 4px 10px; border-radius: 20px; font-size: 0.74rem; font-weight: 700;
+          font-family: 'JetBrains Mono', monospace;
         }
-        .status-active { background: rgba(0,200,83,0.12); color: #00c853; }
-        .status-pending { background: rgba(240,192,64,0.12); color: #f0c040; }
-        .status-resolved { background: rgba(138,155,181,0.12); color: #8a9bb5; }
-        .dash-empty { text-align: center; padding: 40px; color: #6b7c93; font-size: 0.95rem; }
-        .dash-error { text-align: center; padding: 60px; color: #e74c3c; font-size: 1rem; }
-        .dash-loading { text-align: center; padding: 80px; color: #6b7c93; font-size: 1rem; }
+        .status-badge::before { content:''; width:6px;height:6px;border-radius:50%;flex-shrink:0; }
+        .status-active { background: rgba(16,185,129,0.1); color: #059669; }
+        .status-active::before { background: #059669; }
+        .status-pending { background: rgba(245,158,11,0.1); color: #D97706; }
+        .status-pending::before { background: #D97706; }
+        .status-resolved { background: rgba(100,116,147,0.1); color: var(--muted); }
+        .status-resolved::before { background: var(--muted); }
+
+        .dash-empty {
+          text-align: center; padding: 48px; color: var(--muted);
+          font-size: 0.9rem;
+        }
+        .dash-error {
+          text-align: center; padding: 60px; color: var(--red);
+          font-size: 1rem; background: rgba(239,68,68,0.04);
+          border-radius: 16px; border: 1.5px solid rgba(239,68,68,0.12);
+        }
+        .dash-loading {
+          text-align: center; padding: 80px;
+          display: flex; flex-direction: column; align-items: center; gap: 16px;
+          color: var(--muted);
+        }
+        .loading-spinner {
+          width: 36px; height: 36px; border-radius: 50%;
+          border: 3px solid rgba(232,87,26,0.15);
+          border-top-color: var(--orange);
+          animation: spin 0.8s linear infinite;
+        }
+        @keyframes spin { to { transform: rotate(360deg); } }
+
+        .mono { font-family: 'JetBrains Mono', monospace; font-size: 0.82rem; color: var(--muted); }
       `}</style>
 
       <div className="dash-wrap">
         <div className="dash-topbar">
-          <h1>⏱ GoldenHour</h1>
+          <Link href="/" className="dash-logo">
+            <div className="dash-logo-dot" />
+            Golden<span>Hour</span>
+          </Link>
           <div className="dash-topbar-actions">
             <Link href="/">Home</Link>
             {role === "admin" && <Link href="/admin">Admin</Link>}
@@ -144,34 +284,53 @@ export default function DashboardPage() {
 
         <div className="dash-body">
           {loading ? (
-            <div className="dash-loading">Loading dashboard...</div>
+            <div className="dash-loading">
+              <div className="loading-spinner" />
+              Loading dashboard...
+            </div>
           ) : error ? (
             <div className="dash-error">
               {error}
               {error === "Not logged in" && (
                 <div style={{ marginTop: 16 }}>
-                  <Link href="/auth" style={{ color: "#f0c040" }}>Go to Login</Link>
+                  <Link href="/auth" style={{ color: "var(--orange)", fontWeight: 600 }}>Go to Login →</Link>
                 </div>
               )}
             </div>
           ) : (
             <>
-              <div className="dash-greeting">Welcome back, {user?.name || "User"}</div>
-              <div className="dash-role">
-                {user?.email} <span>{role}</span>
+              <div className="dash-welcome">
+                <div className="dash-welcome-left">
+                  <h1>Welcome back, <span>{user?.name || "User"}</span> 👋</h1>
+                  <p>{user?.email}</p>
+                </div>
+                <div
+                  className="dash-role-badge"
+                  style={{
+                    background: `${roleColor}12`,
+                    color: roleColor,
+                    border: `1.5px solid ${roleColor}30`,
+                  }}
+                >
+                  <div className="dash-role-dot" style={{ background: roleColor }} />
+                  {role.toUpperCase()}
+                </div>
               </div>
 
               <div className="dash-cards">
-                <div className="dash-card">
-                  <div className="dash-card-value">{activeSessions.length}</div>
+                <div className="dash-card" style={{ ["--card-color" as string]: "var(--orange)" }}>
+                  <div className="dash-card-icon">🚨</div>
+                  <div className="dash-card-value" style={{ color: "var(--orange)" }}>{activeSessions.length}</div>
                   <div className="dash-card-label">Active Sessions</div>
                 </div>
-                <div className="dash-card">
-                  <div className="dash-card-value">{sessions.length}</div>
+                <div className="dash-card" style={{ ["--card-color" as string]: "var(--blue)" }}>
+                  <div className="dash-card-icon">📋</div>
+                  <div className="dash-card-value" style={{ color: "var(--blue)" }}>{sessions.length}</div>
                   <div className="dash-card-label">Total Sessions</div>
                 </div>
-                <div className="dash-card">
-                  <div className="dash-card-value" style={{ color: "#00c853" }}>
+                <div className="dash-card" style={{ ["--card-color" as string]: "var(--green)" }}>
+                  <div className="dash-card-icon">✅</div>
+                  <div className="dash-card-value" style={{ color: "var(--green)" }}>
                     {sessions.filter((s) => s.status === "resolved").length}
                   </div>
                   <div className="dash-card-label">Resolved</div>
@@ -189,36 +348,41 @@ export default function DashboardPage() {
                 {(role === "driver" || role === "admin") && (
                   <Link href="/driver" className="dash-quick-link">🚗 Driver Mode</Link>
                 )}
+                {role === "admin" && (
+                  <Link href="/admin" className="dash-quick-link">🖥️ Admin Panel</Link>
+                )}
               </div>
 
               <div className="dash-section-title">Emergency Sessions</div>
               {sessions.length === 0 ? (
-                <div className="dash-empty">No emergency sessions yet.</div>
+                <div className="dash-table-wrap">
+                  <div className="dash-empty">No emergency sessions yet.</div>
+                </div>
               ) : (
-                <table className="dash-table">
-                  <thead>
-                    <tr>
-                      <th>ID</th>
-                      <th>Status</th>
-                      <th>Priority</th>
-                      <th>Created</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {sessions.map((s) => (
-                      <tr key={s._id}>
-                        <td style={{ fontFamily: "monospace", fontSize: "0.82rem" }}>
-                          {s._id.slice(-8)}
-                        </td>
-                        <td>
-                          <span className={`status-badge status-${s.status}`}>{s.status}</span>
-                        </td>
-                        <td>P{s.priority}</td>
-                        <td>{new Date(s.createdAt).toLocaleString()}</td>
+                <div className="dash-table-wrap">
+                  <table className="dash-table">
+                    <thead>
+                      <tr>
+                        <th>ID</th>
+                        <th>Status</th>
+                        <th>Priority</th>
+                        <th>Created</th>
                       </tr>
-                    ))}
-                  </tbody>
-                </table>
+                    </thead>
+                    <tbody>
+                      {sessions.map((s) => (
+                        <tr key={s._id}>
+                          <td className="mono">{s._id.slice(-8)}</td>
+                          <td>
+                            <span className={`status-badge status-${s.status}`}>{s.status}</span>
+                          </td>
+                          <td><span className="mono">P{s.priority}</span></td>
+                          <td className="mono">{new Date(s.createdAt).toLocaleString()}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
               )}
             </>
           )}

@@ -234,16 +234,17 @@ export default function DriverDashboard() {
         *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
 
         :root {
-          --midnight: #050C1A;
-          --navy:     #0A1628;
-          --navy2:    #0F2040;
-          --orange:   #FF6B1A;
-          --amber:    #FFB347;
-          --white:    #F5F7FA;
-          --muted:    #8A9BB5;
-          --success:  #34D399;
-          --danger:   #FF4444;
-          --blue:     #60A5FA;
+          --midnight: #FFFBF5;
+          --navy:     #FFFFFF;
+          --navy2:    #F1F5F9;
+          --orange:   #E8571A;
+          --amber:    #F59E0B;
+          --white:    #1E293B;
+          --muted:    #64748B;
+          --success:  #059669;
+          --danger:   #DC2626;
+          --blue:     #3B82F6;
+          --border:   #E2E8F0;
         }
 
         html, body { height: 100%; overflow: hidden; }
@@ -252,10 +253,8 @@ export default function DriverDashboard() {
         /* Grid bg */
         .bg-grid {
           position: fixed; inset: 0; z-index: 0; pointer-events: none;
-          background-image:
-            linear-gradient(rgba(96,165,250,0.025) 1px, transparent 1px),
-            linear-gradient(90deg, rgba(96,165,250,0.025) 1px, transparent 1px);
-          background-size: 60px 60px;
+          background-image: radial-gradient(circle, rgba(59,130,246,0.08) 1px, transparent 1px);
+          background-size: 28px 28px;
         }
 
         /* ── TOP BAR ── */
@@ -264,9 +263,10 @@ export default function DriverDashboard() {
           height: 52px; z-index: 60;
           display: flex; align-items: center; justify-content: space-between;
           padding: 0 1.5rem;
-          background: rgba(5,12,26,0.96);
-          border-bottom: 1px solid rgba(96,165,250,0.15);
+          background: rgba(255,255,255,0.95);
+          border-bottom: 1px solid rgba(226,232,240,1);
           backdrop-filter: blur(20px);
+          box-shadow: 0 1px 8px rgba(0,0,0,0.05);
         }
         .tb-left, .tb-right { display: flex; align-items: center; gap: 0.85rem; }
 
@@ -311,13 +311,14 @@ export default function DriverDashboard() {
 
         /* ── LEFT SIDEBAR ── */
         .sidebar {
-          border-right: 1px solid rgba(96,165,250,0.1);
+          border-right: 1px solid var(--border);
           background: var(--navy);
           display: flex; flex-direction: column; overflow-y: auto;
-          scrollbar-width: thin; scrollbar-color: rgba(96,165,250,0.12) transparent;
+          scrollbar-width: thin; scrollbar-color: rgba(226,232,240,1) transparent;
+          box-shadow: 2px 0 8px rgba(0,0,0,0.04);
         }
 
-        .sb-sec { padding: 1rem 1.15rem; border-bottom: 1px solid rgba(255,255,255,0.04); }
+        .sb-sec { padding: 1rem 1.15rem; border-bottom: 1px solid var(--border); }
         .sb-title {
           font-family:'JetBrains Mono',monospace; font-size:0.57rem;
           color:var(--muted); text-transform:uppercase; letter-spacing:0.12em;
@@ -425,7 +426,7 @@ export default function DriverDashboard() {
         /* ── MAIN AREA ── */
         .main-area {
           display: flex; flex-direction: column; overflow: hidden;
-          background: var(--midnight);
+          background: #F8FAFC;
         }
 
         /* ── FULL-SCREEN ALERT OVERLAY ── */
@@ -517,9 +518,10 @@ export default function DriverDashboard() {
         /* ── ALERT LIST (main area) ── */
         .alert-header {
           padding: 1.2rem 1.5rem;
-          border-bottom: 1px solid rgba(255,255,255,0.05);
+          border-bottom: 1px solid var(--border);
           display: flex; align-items: center; justify-content: space-between;
           flex-shrink: 0;
+          background: #fff;
         }
         .alert-header-title {
           font-family:'Bebas Neue',cursive; font-size:1.8rem; letter-spacing:0.04em;
@@ -557,12 +559,13 @@ export default function DriverDashboard() {
         /* Alert list item */
         .al-item {
           padding: 1rem 1.2rem; border-radius: 10px; margin-bottom: 0.65rem;
-          border: 1px solid rgba(255,255,255,0.05);
-          background: var(--navy);
+          border: 1px solid var(--border);
+          background: #fff;
           transition: all 0.2s; cursor: default;
           position: relative; overflow: hidden;
+          box-shadow: 0 1px 4px rgba(0,0,0,0.04);
         }
-        .al-item:hover { background: var(--navy2); }
+        .al-item:hover { background: #FFF7ED; border-color: rgba(232,87,26,0.2); }
         .al-item.active { animation: alertItemPulse 1.5s ease-in-out infinite; }
         .al-item.active.ambulance { border-color: rgba(255,68,68,0.3); }
         .al-item.active.private { border-color: rgba(255,179,71,0.3); }
@@ -587,8 +590,8 @@ export default function DriverDashboard() {
           font-size: 0.82rem; font-weight: 600; line-height: 1.55;
           padding: 0.7rem 0.85rem; border-radius: 7px; margin-bottom: 0.55rem;
         }
-        .al-instruction.ambulance { background:rgba(255,68,68,0.06); color:#FF8888; border:1px solid rgba(255,68,68,0.12); }
-        .al-instruction.private { background:rgba(255,179,71,0.06); color:#FFD088; border:1px solid rgba(255,179,71,0.12); }
+        .al-instruction.ambulance { background:rgba(220,38,38,0.06); color:#B91C1C; border:1px solid rgba(220,38,38,0.15); }
+        .al-instruction.private { background:rgba(245,158,11,0.06); color:#92400E; border:1px solid rgba(245,158,11,0.15); }
 
         .al-meta { display:flex; gap:1.5rem; }
         .al-meta-item { display:flex; align-items:center; gap:0.35rem; font-family:'JetBrains Mono',monospace; font-size:0.6rem; color:var(--muted); }
