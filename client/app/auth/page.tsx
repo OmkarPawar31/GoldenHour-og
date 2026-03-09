@@ -19,7 +19,7 @@ function AuthContent() {
     const searchParams = useSearchParams();
     const [mode, setMode] = useState<Mode>("login");
     const [selectedRole, setSelectedRole] = useState<Role | null>(null);
-    const [form, setForm] = useState({ email: "", password: "", name: "", vehicleId: "" });
+    const [form, setForm] = useState({ email: "", password: "", name: "", phone: "", vehicleId: "" });
     const [loading, setLoading] = useState(false);
     const [error, setError] = useState("");
     const [mounted, setMounted] = useState(false);
@@ -37,15 +37,67 @@ function AuthContent() {
             return;
         }
         setLoading(true);
-        await new Promise((r) => setTimeout(r, 1200)); // replace with real API call
-        setLoading(false);
-        const routes: Record<Role, string> = {
-            ambulance: "/ambulance",
-            private: "/private-emergency",
-            driver: "/driver",
-            admin: "/admin",
-        };
-        router.push(selectedRole ? routes[selectedRole] : "/dashboard");
+
+        try {
+            const API_BASE = process.env.NEXT_PUBLIC_API_URL || "http://localhost:5000/api";
+
+            if (mode === "register") {
+                // Map frontend role to backend role
+                const roleMap: Record<Role, string> = {
+                    ambulance: "driver",
+                    private: "user",
+                    driver: "driver",
+                    admin: "admin",
+                };
+                const res = await fetch(`${API_BASE}/auth/register`, {
+                    method: "POST",
+                    headers: { "Content-Type": "application/json" },
+                    body: JSON.stringify({
+                        name: form.name,
+                        email: form.email,
+                        password: form.password,
+                        role: roleMap[selectedRole!],
+                        phone: form.phone || "0000000000",
+                    }),
+                });
+                const data = await res.json();
+                if (!res.ok) throw new Error(data.message || "Registration failed");
+                localStorage.setItem("gh_token", data.token);
+                localStorage.setItem("gh_user", JSON.stringify(data.user));
+                localStorage.setItem("gh_role", selectedRole!);
+            } else {
+                const res = await fetch(`${API_BASE}/auth/login`, {
+                    method: "POST",
+                    headers: { "Content-Type": "application/json" },
+                    body: JSON.stringify({
+                        email: form.email,
+                        password: form.password,
+                    }),
+                });
+                const data = await res.json();
+                if (!res.ok) throw new Error(data.message || "Login failed");
+                localStorage.setItem("gh_token", data.token);
+                localStorage.setItem("gh_user", JSON.stringify(data.user));
+                // Infer frontend role from backend role
+                const backendRole = data.user.role;
+                const inferredRole = backendRole === "admin" ? "admin" : backendRole === "driver" ? "ambulance" : "private";
+                localStorage.setItem("gh_role", inferredRole);
+                if (!selectedRole) setSelectedRole(inferredRole as Role);
+            }
+
+            const role = selectedRole || "ambulance";
+            const routes: Record<Role, string> = {
+                ambulance: "/ambulance",
+                private: "/private-emergency",
+                driver: "/driver",
+                admin: "/admin",
+            };
+            router.push(routes[role]);
+        } catch (err) {
+            setError(err instanceof Error ? err.message : "Authentication failed");
+        } finally {
+            setLoading(false);
+        }
     };
 
     if (!mounted) return null;
@@ -495,6 +547,20 @@ function AuthContent() {
                                         placeholder="John Doe"
                                         value={form.name}
                                         onChange={(e) => setForm({ ...form, name: e.target.value })}
+                                    />
+                                </div>
+                            )}
+
+                            {mode === "register" && (
+                                <div className="field">
+                                    <label className="field-label">Phone Number</label>
+                                    <input
+                                        className="field-input"
+                                        type="tel"
+                                        required
+                                        placeholder="+91 98765 43210"
+                                        value={form.phone}
+                                        onChange={(e) => setForm({ ...form, phone: e.target.value })}
                                     />
                                 </div>
                             )}

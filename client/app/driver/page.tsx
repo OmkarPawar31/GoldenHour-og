@@ -2,6 +2,7 @@
 
 import { useState, useEffect, useRef, useCallback } from "react";
 import Link from "next/link";
+import { io, Socket } from "socket.io-client";
 
 /* ─────────────────────────────────────────────────────────
    TYPES
@@ -88,6 +89,7 @@ export default function DriverDashboard() {
   const alertSoundRef = useRef<HTMLAudioElement | null>(null);
   const simulateRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const alertListRef = useRef<HTMLDivElement>(null);
+  const socketRef = useRef<Socket | null>(null);
 
   /* auto-scroll alerts */
   useEffect(() => {
@@ -103,10 +105,86 @@ export default function DriverDashboard() {
   /* ── Start listening ── */
   const startListening = useCallback(() => {
     setListening(true);
-    /* Simulate WebSocket connection */
-    setTimeout(() => setConnected(true), 1200);
 
-    /* Simulate periodic alerts */
+    const SOCKET_URL = process.env.NEXT_PUBLIC_SOCKET_URL || "http://localhost:5000";
+
+    // Connect to real emergency socket
+    socketRef.current = io(`${SOCKET_URL}/emergency`, { transports: ["websocket", "polling"] });
+
+    socketRef.current.on("connect", () => {
+      setConnected(true);
+    });
+
+    socketRef.current.on("disconnect", () => {
+      setConnected(false);
+    });
+
+    // Listen for real emergency alerts
+    socketRef.current.on("alert", (data: { message: string; sessionId?: string; timestamp: string }) => {
+      const newAlert: AlertEntry = {
+        id: `alert-${Date.now()}`,
+        time: nowStr(),
+        vehicleId: data.sessionId?.slice(-8) || "UNKNOWN",
+        type: "ambulance",
+        direction: "Emergency vehicle approaching",
+        distance: "< 1km",
+        eta: "< 1 min",
+        instruction: data.message,
+        priority: 100,
+        active: true,
+      };
+      setAlerts(prev => [newAlert, ...prev.slice(0, 19)]);
+      setAlertCount(c => c + 1);
+      setLastAlertTime(nowStr());
+      setShowFullAlert(newAlert);
+      setTimeout(() => {
+        setShowFullAlert(prev => prev?.id === newAlert.id ? null : prev);
+        setAlerts(prev => prev.map(a => a.id === newAlert.id ? { ...a, active: false } : a));
+      }, 8000);
+    });
+
+    socketRef.current.on("new-emergency", (data: { sessionId: string; priority: string; origin: { lat: number; lng: number } }) => {
+      const newAlert: AlertEntry = {
+        id: `alert-${Date.now()}`,
+        time: nowStr(),
+        vehicleId: data.sessionId?.slice(-8) || "EMG",
+        type: data.priority === "critical" ? "ambulance" : "private",
+        direction: "Emergency vehicle en route",
+        distance: "< 1km",
+        eta: "Approaching",
+        instruction: data.priority === "critical"
+          ? "🚨 EMERGENCY VEHICLE APPROACHING! Move your vehicle to the LEFT side. Clear the RIGHT lane immediately."
+          : "⚠️ Private emergency vehicle approaching. Please move LEFT and clear the RIGHT lane if possible.",
+        priority: data.priority === "critical" ? 100 : 70,
+        active: true,
+      };
+      setAlerts(prev => [newAlert, ...prev.slice(0, 19)]);
+      setAlertCount(c => c + 1);
+      setLastAlertTime(nowStr());
+      setShowFullAlert(newAlert);
+      setTimeout(() => {
+        setShowFullAlert(prev => prev?.id === newAlert.id ? null : prev);
+        setAlerts(prev => prev.map(a => a.id === newAlert.id ? { ...a, active: false } : a));
+      }, 8000);
+    });
+
+    socketRef.current.on("green-corridor:activate", () => {
+      // Corridor activated nearby — keep listening
+    });
+
+    socketRef.current.on("emergency-resolved", (data: { sessionId: string }) => {
+      setAlerts(prev => prev.map(a =>
+        a.vehicleId === data.sessionId?.slice(-8) ? { ...a, active: false } : a
+      ));
+    });
+
+    // Also keep simulation fallback for demo/offline mode
+    setTimeout(() => {
+      if (!socketRef.current?.connected) {
+        setConnected(true); // simulate connected for demo
+      }
+    }, 1200);
+
     simulateRef.current = setInterval(() => {
       const template = ALERT_TEMPLATES[Math.floor(Math.random() * ALERT_TEMPLATES.length)];
       const newAlert: AlertEntry = {
@@ -123,7 +201,6 @@ export default function DriverDashboard() {
       setLastAlertTime(nowStr());
       setShowFullAlert(newAlert);
 
-      /* Auto-dismiss full alert after 8s */
       setTimeout(() => {
         setShowFullAlert(prev => prev?.id === newAlert.id ? null : prev);
         setAlerts(prev => prev.map(a => a.id === newAlert.id ? { ...a, active: false } : a));
@@ -136,11 +213,14 @@ export default function DriverDashboard() {
     setListening(false);
     setConnected(false);
     if (simulateRef.current) clearInterval(simulateRef.current);
+    socketRef.current?.disconnect();
+    socketRef.current = null;
   }, []);
 
   /* cleanup on unmount */
   useEffect(() => () => {
     if (simulateRef.current) clearInterval(simulateRef.current);
+    socketRef.current?.disconnect();
   }, []);
 
   /* ──────────────────────────────────────────────────────

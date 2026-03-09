@@ -2,6 +2,7 @@
 
 import { useState, useEffect, useRef, useCallback } from "react";
 import Link from "next/link";
+import { io, Socket } from "socket.io-client";
 
 /* ─────────────────────────────────────────────────────────
    TYPES
@@ -98,6 +99,7 @@ export default function PrivateEmergencyDashboard() {
   const [plateSubmitted, setPlateSubmitted] = useState(false);
   const [nearbyAmbulances, setNearbyAmbulances] = useState<NearbyAmbulance[]>([]);
   const [adminApproved, setAdminApproved] = useState(false);
+  const [backendSessionId, setBackendSessionId] = useState<string | null>(null);
 
   /* ── refs ── */
   const mapRef = useRef<HTMLDivElement>(null);
@@ -112,6 +114,7 @@ export default function PrivateEmergencyDashboard() {
   const moveRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const ambulanceRefresh = useRef<ReturnType<typeof setInterval> | null>(null);
   const logRef = useRef<HTMLDivElement>(null);
+  const socketRef = useRef<Socket | null>(null);
 
   /* ── helpers ── */
   const addLog = useCallback((msg: string, type: LogEntry["type"] = "info") => {
@@ -282,6 +285,31 @@ export default function PrivateEmergencyDashboard() {
     addLog("JWT role verified: PRIVATE P-70", "info");
     addLog("Requesting fastest route via Directions API…", "info");
 
+    // Create session on backend
+    const API_BASE = process.env.NEXT_PUBLIC_API_URL || "http://localhost:5000/api";
+    const SOCKET_URL = process.env.NEXT_PUBLIC_SOCKET_URL || "http://localhost:5000";
+    const token = typeof window !== "undefined" ? localStorage.getItem("gh_token") : null;
+
+    if (token) {
+      fetch(`${API_BASE}/emergency`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json", "Authorization": `Bearer ${token}` },
+        body: JSON.stringify({ origin: ORIGIN, destination: DESTINATION }),
+      })
+        .then(r => r.json())
+        .then(data => {
+          if (data.session?._id) {
+            setBackendSessionId(data.session._id);
+            addLog(`Backend session: ${data.session._id.slice(-8)}`, "success");
+            socketRef.current = io(`${SOCKET_URL}/tracking`, { transports: ["websocket", "polling"] });
+            socketRef.current.emit("join-session", data.session._id);
+          }
+        })
+        .catch(() => addLog("Backend unavailable — running in simulation mode", "warn"));
+    } else {
+      addLog("No auth token — running in simulation mode", "warn");
+    }
+
     const svc = new window.google.maps.DirectionsService();
     svc.route(
       {
@@ -303,19 +331,21 @@ export default function PrivateEmergencyDashboard() {
         const leg = result.routes[0].legs[0];
 
         const fullPath: google.maps.LatLng[] = [];
-        result.routes[0].legs[0].steps.forEach(step =>
-          window.google.maps.geometry.encoding
-            .decodePath(step.polyline.points)
-            .forEach(p => fullPath.push(p))
-        );
+        result.routes[0].legs[0].steps.forEach(step => {
+          if (step.polyline) {
+            window.google.maps.geometry.encoding
+              .decodePath(step.polyline.points)
+              .forEach(p => fullPath.push(p));
+          }
+        });
 
         routePath.current = fullPath;
         routeIndex.current = 0;
 
-        setEtaText(leg.duration_in_traffic?.text ?? leg.duration.text);
-        setDistText(leg.distance.text);
+        setEtaText(leg.duration_in_traffic?.text ?? leg.duration?.text ?? "--");
+        setDistText(leg.distance?.text ?? "--");
 
-        addLog(`Route: ${leg.distance.text} · ${leg.duration.text}`, "success");
+        addLog(`Route: ${leg.distance?.text ?? "?"} · ${leg.duration?.text ?? "?"}`, "success");
         addLog("Green corridor activating (P-70)…", "warn");
 
         drawCorridor(fullPath);
@@ -362,6 +392,20 @@ export default function PrivateEmergencyDashboard() {
     addLog("Terminating session…", "warn");
     [timerRef, moveRef].forEach(r => { if (r.current) clearInterval(r.current); });
 
+    // Resolve on backend
+    if (backendSessionId) {
+      const API_BASE = process.env.NEXT_PUBLIC_API_URL || "http://localhost:5000/api";
+      const token = typeof window !== "undefined" ? localStorage.getItem("gh_token") : null;
+      if (token) {
+        fetch(`${API_BASE}/emergency/${backendSessionId}/resolve`, {
+          method: "PATCH",
+          headers: { "Authorization": `Bearer ${token}` },
+        }).catch(() => {});
+      }
+      socketRef.current?.disconnect();
+      socketRef.current = null;
+    }
+
     setTimeout(() => {
       corridorPoly.current?.setMap(null);
       geofenceCircle.current?.setMap(null);
@@ -382,15 +426,17 @@ export default function PrivateEmergencyDashboard() {
       setNearbyCount(0);
       setGps(ORIGIN);
       setAdminApproved(false);
+      setBackendSessionId(null);
       addLog("Corridor closed — geo-fence lifted", "success");
       addLog("All driver alerts cleared", "success");
       addLog("Session terminated", "info");
     }, 1200);
-  }, [addLog]);
+  }, [addLog, backendSessionId]);
 
   /* cleanup on unmount */
   useEffect(() => () => {
     [timerRef, moveRef].forEach(r => { if (r.current) clearInterval(r.current); });
+    socketRef.current?.disconnect();
   }, []);
 
   /* ── derived ── */
