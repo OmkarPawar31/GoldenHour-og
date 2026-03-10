@@ -1,9 +1,11 @@
 "use client";
 
-import { useEffect } from "react";
+import { useEffect, useState } from "react";
 import Link from "next/link";
 
 export default function HomePage() {
+  const [isModalOpen, setIsModalOpen] = useState(false);
+
   useEffect(() => {
     const observer = new IntersectionObserver(
       (entries) =>
@@ -385,24 +387,28 @@ export default function HomePage() {
           gap: 1px;
           background: var(--border);
           border: 1px solid var(--border);
-          border-radius: 16px; overflow: hidden;
-          margin-top: 2.5rem;
-          box-shadow: 0 4px 32px rgba(0,0,0,0.05);
+          border-radius: 20px;
+          overflow: hidden;
+          margin-top: 3.5rem;
+          box-shadow: 0 4px 32px rgba(0,0,0,0.06);
         }
         .feature-card {
-          background: #fff; padding: 2.2rem;
-          transition: background 0.3s, transform 0.3s, box-shadow 0.3s;
+          background: #fff; padding: 2.5rem;
+          transition: all 0.3s ease;
           position: relative; overflow: hidden;
           cursor: default;
         }
         .feature-card::before {
           content: '';
-          position: absolute; top: 0; left: 0; right: 0; height: 3px;
+          position: absolute; top: 0; left: 0; right: 0; height: 4px;
           background: linear-gradient(90deg, var(--orange), var(--amber));
           transform: scaleX(0); transform-origin: left;
-          transition: transform 0.35s ease;
+          transition: transform 0.4s ease;
+          z-index: 2;
         }
-        .feature-card:hover { background: var(--warm); }
+        .feature-card:hover { 
+          background: var(--warm); 
+        }
         .feature-card:hover::before { transform: scaleX(1); }
         .feature-num { font-family: 'JetBrains Mono', monospace; font-size: 0.68rem; color: rgba(232,87,26,0.4); margin-bottom: 1rem; display: block; font-weight: 600; }
         .feature-icon { font-size: 2rem; margin-bottom: 0.9rem; display: block; transition: transform 0.3s; }
@@ -469,31 +475,37 @@ export default function HomePage() {
         /* CTA */
         .cta-wrap {
           position: relative; z-index: 1;
-          margin: 0 3rem 6rem;
-          border: 1.5px solid rgba(232,87,26,0.2);
-          border-radius: 20px; overflow: hidden;
-          background: linear-gradient(135deg, #fff 0%, var(--warm) 100%);
-          box-shadow: 0 8px 48px rgba(232,87,26,0.1);
+          margin: 0 3rem 8rem;
+          border: 1px solid rgba(232,87,26,0.15);
+          border-radius: 32px; overflow: hidden;
+          background: #fff;
+          box-shadow: 0 4px 64px rgba(0,0,0,0.04);
+          transition: transform 0.4s ease, box-shadow 0.4s ease;
+        }
+        .cta-wrap:hover {
+          transform: translateY(-4px);
+          box-shadow: 0 20px 80px rgba(232,87,26,0.12);
         }
         .cta-inner {
-          padding: 5rem 4rem;
+          padding: 6rem 5rem;
           display: flex; align-items: center; justify-content: space-between;
-          gap: 3rem; flex-wrap: wrap;
-          position: relative; z-index: 1;
+          gap: 4rem; flex-wrap: wrap;
+          position: relative; z-index: 2;
         }
         .cta-glow {
           position: absolute; inset: 0; pointer-events: none;
-          background: radial-gradient(ellipse at 70% 50%, rgba(232,87,26,0.07), transparent 70%);
+          background: radial-gradient(circle at 80% 50%, rgba(232,87,26,0.1), transparent 60%);
+          mix-blend-mode: multiply;
         }
         .cta-pattern {
           position: absolute; inset: 0; pointer-events: none;
-          background-image: radial-gradient(circle, rgba(232,87,26,0.08) 1px, transparent 1px);
-          background-size: 24px 24px; opacity: 0.6;
+          background-image: radial-gradient(var(--orange) 1px, transparent 1px);
+          background-size: 32px 32px; opacity: 0.05;
         }
-        .cta-title { font-family: 'Bebas Neue', cursive; font-size: clamp(2.5rem,5vw,4rem); line-height: 0.95; color: var(--text); }
+        .cta-title { font-family: 'Bebas Neue', cursive; font-size: clamp(3rem,6vw,5rem); line-height: 0.9; color: var(--text); }
         .cta-title span { color: var(--orange); }
-        .cta-sub { color: var(--muted); font-size: 0.95rem; margin-top: 0.8rem; max-width: 400px; line-height: 1.65; }
-        .cta-actions { display: flex; gap: 1rem; flex-wrap: wrap; }
+        .cta-sub { color: var(--muted); font-size: 1.1rem; margin-top: 1.2rem; max-width: 500px; line-height: 1.6; }
+        .cta-actions { display: flex; gap: 1.2rem; flex-wrap: wrap; margin-top: 2.5rem; }
 
         /* Footer */
         .site-footer {
@@ -576,9 +588,12 @@ export default function HomePage() {
             <li key={l}><a href={`#${l.toLowerCase().replace(/ /g, "-")}`}>{l}</a></li>
           ))}
         </ul>
-        <div style={{ display: "flex", gap: "0.8rem" }}>
-          <Link href="/auth" className="btn btn-ghost">Sign In</Link>
-          <Link href="/auth?mode=register" className="btn btn-primary">Get Started</Link>
+        <div style={{ display: "flex", gap: "0.80rem", flexWrap: "wrap", justifyContent: "flex-end", alignItems: 'center' }}>
+          <button onClick={() => setIsModalOpen(true)} className="btn btn-ghost" style={{ borderColor: 'var(--danger)', color: 'var(--danger)', fontWeight: 700 }}>🚨 Emergency Request</button>
+          <div style={{ width: '1px', height: '20px', background: 'var(--border)', margin: '0 0.5rem' }} />
+          <Link href="/auth?role=hospital" className="btn btn-ghost">Hospitals</Link>
+          <Link href="/auth?role=ambulance" className="btn btn-ghost">Ambulance</Link>
+          <Link href="/auth?role=admin" className="btn btn-primary" style={{ fontSize: '0.85rem' }}>Admin Portal</Link>
         </div>
       </nav>
 
@@ -725,17 +740,24 @@ export default function HomePage() {
       </section>
 
       {/* ── CTA ── */}
+      {/* ── CTA ── */}
       <div className="cta-wrap reveal">
         <div className="cta-glow" />
         <div className="cta-pattern" />
         <div className="cta-inner">
-          <div>
+          <div style={{ flex: 1 }}>
             <div className="cta-title">Ready to Build the <span>Golden Hour?</span></div>
-            <p className="cta-sub">Register your vehicle, choose your role, and join the network that keeps emergency lanes clear.</p>
+            <p className="cta-sub">Join the next-generation emergency network. Register your vehicle, choose your role, and clear the path for critical moments.</p>
+            <div className="cta-actions">
+              <Link href="/auth?mode=register" className="btn-hero btn-hero-primary" style={{ padding: '1rem 2.5rem', fontSize: '1.1rem' }}>⚡ Get Started Now</Link>
+              <Link href="/admin" className="btn-hero btn-hero-outline" style={{ padding: '1rem 2.5rem', fontSize: '1.1rem' }}>View Live Stats</Link>
+            </div>
           </div>
-          <div className="cta-actions">
-            <Link href="/auth?mode=register" className="btn-hero btn-hero-primary">⚡ Register Now</Link>
-            <Link href="/admin" className="btn-hero btn-hero-outline">View Dashboard</Link>
+          <div className="cta-visual-lockup" style={{ display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+            <div style={{ position: 'relative' }}>
+              <div style={{ width: '120px', height: '120px', border: '2px solid var(--orange)', borderRadius: '50%', opacity: 0.2, animation: 'radarPulse 4s infinite' }} />
+              <div style={{ position: 'absolute', inset: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '3rem' }}>🚑</div>
+            </div>
           </div>
         </div>
       </div>
@@ -748,6 +770,58 @@ export default function HomePage() {
         </div>
         <span className="footer-copy">© 2025 GoldenHour — Emergency Mobility Platform</span>
       </footer>
+
+      {/* ── EMERGENCY REQUEST MODAL ── */}
+      {isModalOpen && (
+        <div style={{ position: 'fixed', inset: 0, zIndex: 9999, display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'rgba(0,0,0,0.6)', backdropFilter: 'blur(8px)' }}>
+          <div style={{ background: '#fff', padding: '2.5rem', borderRadius: '20px', width: '100%', maxWidth: '500px', position: 'relative', boxShadow: '0 20px 60px rgba(0,0,0,0.15)' }}>
+            <button onClick={() => setIsModalOpen(false)} style={{ position: 'absolute', top: '1.2rem', right: '1.5rem', background: 'none', border: 'none', fontSize: '1.5rem', cursor: 'pointer', color: 'var(--muted)' }}>×</button>
+            <h2 className="section-title" style={{ fontSize: '2rem', marginBottom: '0.5rem', textAlign: 'center' }}>Emergency <span>Request</span></h2>
+            <p style={{ textAlign: 'center', color: 'var(--muted)', marginBottom: '2rem', fontSize: '0.9rem' }}>Fast-track your personal emergency vehicle.</p>
+
+            <form style={{ display: 'flex', flexDirection: 'column', gap: '1.25rem' }} onSubmit={(e) => { e.preventDefault(); alert("Emergency Request Submitted!"); window.location.href = '/private-emergency'; }}>
+              <div>
+                <label style={{ display: 'block', fontFamily: "'JetBrains Mono', monospace", fontSize: '0.65rem', fontWeight: 600, color: 'var(--muted)', marginBottom: '0.4rem', textTransform: 'uppercase', letterSpacing: '0.1em' }}>Full Name</label>
+                <input required type="text" placeholder="John Doe" style={{ width: '100%', padding: '0.8rem 1rem', borderRadius: '10px', border: '1.5px solid var(--border)', outline: 'none', fontFamily: 'inherit', fontSize: '0.9rem' }} onFocus={(e) => e.target.style.borderColor = 'var(--orange)'} onBlur={(e) => e.target.style.borderColor = 'var(--border)'} />
+              </div>
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem' }}>
+                <div>
+                  <label style={{ display: 'block', fontFamily: "'JetBrains Mono', monospace", fontSize: '0.65rem', fontWeight: 600, color: 'var(--muted)', marginBottom: '0.4rem', textTransform: 'uppercase', letterSpacing: '0.1em' }}>Phone Number</label>
+                  <input required type="tel" placeholder="+1 234 567 890" style={{ width: '100%', padding: '0.8rem 1rem', borderRadius: '10px', border: '1.5px solid var(--border)', outline: 'none', fontFamily: 'inherit', fontSize: '0.9rem' }} onFocus={(e) => e.target.style.borderColor = 'var(--orange)'} onBlur={(e) => e.target.style.borderColor = 'var(--border)'} />
+                </div>
+                <div>
+                  <label style={{ display: 'block', fontFamily: "'JetBrains Mono', monospace", fontSize: '0.65rem', fontWeight: 600, color: 'var(--muted)', marginBottom: '0.4rem', textTransform: 'uppercase', letterSpacing: '0.1em' }}>Car Number</label>
+                  <input required type="text" placeholder="ABC-1234" style={{ width: '100%', padding: '0.8rem 1rem', borderRadius: '10px', border: '1.5px solid var(--border)', outline: 'none', fontFamily: 'inherit', fontSize: '0.9rem' }} onFocus={(e) => e.target.style.borderColor = 'var(--orange)'} onBlur={(e) => e.target.style.borderColor = 'var(--border)'} />
+                </div>
+              </div>
+              <div>
+                <label style={{ display: 'block', fontFamily: "'JetBrains Mono', monospace", fontSize: '0.65rem', fontWeight: 600, color: 'var(--muted)', marginBottom: '0.4rem', textTransform: 'uppercase', letterSpacing: '0.1em' }}>Emergency Rating</label>
+                <select required style={{ width: '100%', padding: '0.8rem 1rem', borderRadius: '10px', border: '1.5px solid var(--border)', outline: 'none', fontFamily: 'inherit', fontSize: '0.9rem', background: 'url("data:image/svg+xml,%3Csvg xmlns=\'http://www.w3.org/2000/svg\' width=\'12\' height=\'12\' viewBox=\'0 0 24 24\' fill=\'none\' stroke=\'currentColor\' stroke-width=\'2\' stroke-linecap=\'round\' stroke-linejoin=\'round\'%3E%3Cpolyline points=\'6 9 12 15 18 9\'/%3E%3C/svg%3E") no-repeat right 1rem center / 1rem', appearance: 'none' }} onFocus={(e) => e.target.style.borderColor = 'var(--orange)'} onBlur={(e) => e.target.style.borderColor = 'var(--border)'}>
+                  <option value="" disabled selected>Select Severity Level...</option>
+                  <option value="critical">Critical (Life Threatening)</option>
+                  <option value="high">High (Immediate Care Required)</option>
+                  <option value="medium">Medium (Urgent Care)</option>
+                  <option value="low">Low (Standard Emergency)</option>
+                </select>
+              </div>
+              <div>
+                <label style={{ display: 'block', fontFamily: "'JetBrains Mono', monospace", fontSize: '0.65rem', fontWeight: 600, color: 'var(--muted)', marginBottom: '0.4rem', textTransform: 'uppercase', letterSpacing: '0.1em' }}>Destination</label>
+                <input required type="text" list="hospital-suggestions" placeholder="Search for nearby hospital..." style={{ width: '100%', padding: '0.8rem 1rem', borderRadius: '10px', border: '1.5px solid var(--border)', outline: 'none', fontFamily: 'inherit', fontSize: '0.9rem' }} onFocus={(e) => e.target.style.borderColor = 'var(--orange)'} onBlur={(e) => e.target.style.borderColor = 'var(--border)'} />
+                <datalist id="hospital-suggestions">
+                  <option value="City General Hospital">1.2 km away</option>
+                  <option value="Apollo Medical Center">2.5 km away</option>
+                  <option value="Fortis Healthcare">3.8 km away</option>
+                  <option value="Regional Trauma Center">4.1 km away</option>
+                  <option value="St. John's Mercy Hospital">5.5 km away</option>
+                </datalist>
+              </div>
+              <button type="submit" className="btn-primary" style={{ marginTop: '0.5rem', padding: '1rem', border: 'none', borderRadius: '10px', fontSize: '1rem', cursor: 'pointer', display: 'flex', justifyContent: 'center', alignItems: 'center', gap: '0.5rem' }}>
+                Activate Emergency Corridor →
+              </button>
+            </form>
+          </div>
+        </div>
+      )}
     </>
   );
 }

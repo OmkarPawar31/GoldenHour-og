@@ -4,20 +4,18 @@ import { Suspense, useState, useEffect } from "react";
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 
-type Role = "ambulance" | "private" | "driver" | "admin";
+type Role = "ambulance" | "private" | "driver" | "admin" | "hospital";
 type Mode = "login" | "register";
 
 const ROLES = [
     { key: "ambulance" as Role, icon: "🚑", label: "Ambulance", desc: "Emergency services vehicle", color: "#E8571A", priority: "P-100" },
-    { key: "private" as Role, icon: "🚗", label: "Private Emergency", desc: "Urgent personal vehicle", color: "#F59E0B", priority: "P-70" },
-    { key: "driver" as Role, icon: "🙋", label: "Normal Driver", desc: "Receive corridor alerts", color: "#3B82F6", priority: "P-10" },
-    { key: "admin" as Role, icon: "🖥️", label: "Admin", desc: "Traffic control dashboard", color: "#10B981", priority: "CTL" },
+    { key: "hospital" as Role, icon: "🏥", label: "Hospital", desc: "Emergency receiving hospital", color: "#3B82F6", priority: "HOSP" },
 ];
 
 function AuthContent() {
     const router = useRouter();
     const searchParams = useSearchParams();
-    const [mode, setMode] = useState<Mode>("login");
+    const [mode, setMode] = useState<"login" | "register" | "admin">("login");
     const [selectedRole, setSelectedRole] = useState<Role | null>(null);
     const [form, setForm] = useState({ email: "", password: "", name: "", phone: "", vehicleId: "" });
     const [loading, setLoading] = useState(false);
@@ -26,8 +24,45 @@ function AuthContent() {
 
     useEffect(() => {
         setMounted(true);
-        if (searchParams.get("mode") === "register") setMode("register");
-    }, [searchParams]);
+        const urlMode = searchParams.get("mode");
+        const urlRole = searchParams.get("role") as Role;
+
+        // --- Persistence Logic ---
+        const existingToken = localStorage.getItem("gh_token");
+        const existingRole = localStorage.getItem("gh_role");
+
+        // Only auto-redirect if the logged-in role matches the requested role
+        if (existingToken && existingRole && existingRole === urlRole) {
+            const routes: Record<string, string> = {
+                ambulance: "/ambulance",
+                admin: "/admin",
+                hospital: "/hospital",
+            };
+            if (routes[existingRole]) {
+                router.push(routes[existingRole]);
+                return;
+            }
+        }
+        // -------------------------
+
+        if (urlRole && ["ambulance", "hospital", "admin"].includes(urlRole)) {
+            setSelectedRole(urlRole);
+            if (urlRole === "admin") {
+                setMode("admin");
+            } else if (urlMode === "register") {
+                setMode("register");
+            } else {
+                setMode("login");
+            }
+        } else if (urlMode === "register") {
+            setMode("register");
+        } else if (urlMode === "admin") {
+            setMode("admin");
+            setSelectedRole("admin");
+        }
+    }, [searchParams, router]);
+
+
 
     const handleSubmit = async (e: React.FormEvent) => {
         e.preventDefault();
@@ -47,6 +82,7 @@ function AuthContent() {
                     private: "user",
                     driver: "driver",
                     admin: "admin",
+                    hospital: "hospital",
                 };
                 const res = await fetch(`${API_BASE}/auth/register`, {
                     method: "POST",
@@ -78,25 +114,34 @@ function AuthContent() {
                 localStorage.setItem("gh_token", data.token);
                 localStorage.setItem("gh_user", JSON.stringify(data.user));
                 const backendRole = data.user.role;
-                const inferredRole = backendRole === "admin" ? "admin" : backendRole === "driver" ? "ambulance" : "private";
+                const inferredRole = backendRole === "admin" ? "admin" : backendRole === "driver" ? "ambulance" : backendRole === "hospital" ? "hospital" : "private";
                 localStorage.setItem("gh_role", inferredRole);
                 if (!selectedRole) setSelectedRole(inferredRole as Role);
             }
 
-            const role = selectedRole || "ambulance";
-            const routes: Record<Role, string> = {
+            const finalRole = localStorage.getItem("gh_role") as Role || selectedRole || "ambulance";
+            const routes: Record<string, string> = {
                 ambulance: "/ambulance",
                 private: "/private-emergency",
                 driver: "/driver",
                 admin: "/admin",
+                hospital: "/hospital",
             };
-            router.push(routes[role]);
+            router.push(routes[finalRole] || "/");
         } catch (err) {
             setError(err instanceof Error ? err.message : "Authentication failed");
         } finally {
             setLoading(false);
         }
     };
+
+    const getRoleStyles = () => {
+        if (selectedRole === "hospital") return { accent: "#3B82F6", accentDark: "#2563EB", bg: "#F0F9FF" };
+        if (selectedRole === "admin") return { accent: "#0F172A", accentDark: "#020617", bg: "#F8FAFC" };
+        return { accent: "#E8571A", accentDark: "#C2410C", bg: "#FFFBF5" };
+    };
+
+    const styles = getRoleStyles();
 
     if (!mounted) return null;
 
@@ -108,10 +153,10 @@ function AuthContent() {
         *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
 
         :root {
-          --orange:  #E8571A;
-          --orange2: #F97316;
+          --orange:  ${styles.accent};
+          --orange2: ${styles.accentDark};
           --amber:   #F59E0B;
-          --cream:   #FFFBF5;
+          --cream:   ${styles.bg};
           --warm:    #FFF7ED;
           --slate:   #F1F5F9;
           --text:    #1E293B;
@@ -491,31 +536,52 @@ function AuthContent() {
 
                         {/* Mode toggle */}
                         <div className="mode-toggle">
-                            {(["login", "register"] as Mode[]).map((m) => (
-                                <button
-                                    key={m}
-                                    className={`mode-btn ${mode === m ? "active" : "inactive"}`}
-                                    onClick={() => { setMode(m); setError(""); setSelectedRole(null); }}
-                                >
-                                    {m === "login" ? "Sign In" : "Register"}
-                                </button>
-                            ))}
+                            {mode === "admin" ? (
+                                <button className="mode-btn active">Admin Access</button>
+                            ) : (
+                                <>
+                                    <button
+                                        className={`mode-btn ${mode === "login" ? "active" : "inactive"}`}
+                                        onClick={() => { setMode("login"); setError(""); }}
+                                    >
+                                        Sign In
+                                    </button>
+                                    <button
+                                        className={`mode-btn ${mode === "register" ? "active" : "inactive"}`}
+                                        onClick={() => { setMode("register"); setError(""); }}
+                                    >
+                                        Register
+                                    </button>
+                                </>
+                            )}
                         </div>
 
                         {/* Heading */}
                         <h1 className="form-heading">
-                            {mode === "login"
-                                ? <>Welcome <span>Back.</span></>
-                                : <>Join the <span>Network.</span></>}
+                            {mode === "admin"
+                                ? <>Admin <span>Portal.</span></>
+                                : selectedRole === "hospital"
+                                    ? <>Hospital <span>{mode === "login" ? "Login" : "Admission"}</span></>
+                                    : selectedRole === "ambulance"
+                                        ? <>Fleet <span>{mode === "login" ? "Login" : "Registry"}</span></>
+                                        : mode === "login"
+                                            ? <>Welcome <span>Back.</span></>
+                                            : <>Join the <span>Network.</span></>}
                         </h1>
                         <p className="form-sub">
-                            {mode === "login"
-                                ? "Sign in to access your emergency dashboard."
-                                : "Create your account and select your role below."}
+                            {mode === "admin"
+                                ? "Administrative command and control interface."
+                                : selectedRole === "hospital"
+                                    ? "Connect your facility to the emergency network."
+                                    : selectedRole === "ambulance"
+                                        ? "Register your vehicle for priority transit."
+                                        : mode === "login"
+                                            ? "Sign in to access your dashboard."
+                                            : "Create your account and select your role below."}
                         </p>
 
-                        {/* Role selector — register only */}
-                        {mode === "register" && (
+                        {/* Role selector — only if not preset via URL */}
+                        {mode === "register" && !searchParams.get("role") && (
                             <>
                                 <span className="role-label">Select Your Role *</span>
                                 <div className="role-grid">
@@ -554,12 +620,14 @@ function AuthContent() {
 
                             {mode === "register" && (
                                 <div className="field">
-                                    <label className="field-label">Full Name</label>
+                                    <label className="field-label">
+                                        {selectedRole === 'hospital' ? 'Hospital Name' : 'Full Name'}
+                                    </label>
                                     <input
                                         className="field-input"
                                         type="text"
                                         required
-                                        placeholder="John Doe"
+                                        placeholder={selectedRole === 'hospital' ? "City Hospital" : "John Doe"}
                                         value={form.name}
                                         onChange={(e) => setForm({ ...form, name: e.target.value })}
                                     />
@@ -604,7 +672,7 @@ function AuthContent() {
                                 />
                             </div>
 
-                            {mode === "register" && (
+                            {mode === "register" && selectedRole === 'ambulance' && (
                                 <div className="field">
                                     <label className="field-label">
                                         Vehicle ID <span className="opt-tag">(optional)</span>
@@ -630,6 +698,8 @@ function AuthContent() {
                                     <><div className="spinner" /> Authenticating…</>
                                 ) : mode === "login" ? (
                                     "Sign In →"
+                                ) : mode === "admin" ? (
+                                    "Admin Access →"
                                 ) : (
                                     "Create Account →"
                                 )}
@@ -637,15 +707,17 @@ function AuthContent() {
                         </form>
 
                         {/* Toggle */}
-                        <div className="toggle-row">
-                            {mode === "login" ? "Don't have an account? " : "Already registered? "}
-                            <button
-                                className="toggle-btn"
-                                onClick={() => { setMode(mode === "login" ? "register" : "login"); setError(""); setSelectedRole(null); }}
-                            >
-                                {mode === "login" ? "Register here" : "Sign in"}
-                            </button>
-                        </div>
+                        {mode !== "admin" && (
+                            <div className="toggle-row">
+                                {mode === "login" ? "Don't have an account? " : "Already registered? "}
+                                <button
+                                    className="toggle-btn"
+                                    onClick={() => { setMode(mode === "login" ? "register" : "login"); setError(""); }}
+                                >
+                                    {mode === "login" ? "Register here" : "Sign in"}
+                                </button>
+                            </div>
+                        )}
 
                         {/* Back */}
                         <Link href="/" className="back-link">← Back to Golden Hour</Link>
