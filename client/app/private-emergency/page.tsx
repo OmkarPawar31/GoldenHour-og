@@ -30,9 +30,9 @@ declare global {
 }
 
 /* ─────────────────────────────────────────────────────────
-   ✏️  PASTE YOUR KEY HERE
+   Google Maps API Key (from .env)
 ───────────────────────────────────────────────────────── */
-const MAPS_API_KEY = "YOUR_GOOGLE_MAPS_API_KEY";
+const MAPS_API_KEY = process.env.NEXT_PUBLIC_GOOGLE_MAPS_API_KEY || "";
 
 /* ─────────────────────────────────────────────────────────
    CONSTANTS
@@ -137,8 +137,8 @@ export default function PrivateEmergencyDashboard() {
 
   /* ── Load Google Maps SDK ── */
   useEffect(() => {
-    if (!MAPS_API_KEY || MAPS_API_KEY === "YOUR_GOOGLE_MAPS_API_KEY") {
-      addLog("Add your API key to MAPS_API_KEY constant", "error");
+    if (!MAPS_API_KEY) {
+      addLog("Add NEXT_PUBLIC_GOOGLE_MAPS_API_KEY to .env", "error");
       return;
     }
     if (window.google?.maps) { setMapReady(true); return; }
@@ -441,7 +441,7 @@ export default function PrivateEmergencyDashboard() {
 
   /* ── derived ── */
   const elapsedStr = `${String(Math.floor(elapsed / 60)).padStart(2, "0")}:${String(elapsed % 60).padStart(2, "0")}`;
-  const noKey = !MAPS_API_KEY || MAPS_API_KEY === "YOUR_GOOGLE_MAPS_API_KEY";
+  const noKey = !MAPS_API_KEY;
   const availableAmbulances = nearbyAmbulances.filter(a => a.status === "available");
   const ambulancesNearby = nearbyAmbulances.length > 0;
 

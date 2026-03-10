@@ -26,7 +26,7 @@ interface Emergency {
 }
 
 // --- Constants ---
-const MAPS_API_KEY = "YOUR_GOOGLE_MAPS_API_KEY";
+const MAPS_API_KEY = process.env.NEXT_PUBLIC_GOOGLE_MAPS_API_KEY || "";
 const HOSPITAL_LOCATION = { lat: 18.5314, lng: 73.8446 };
 
 const MAP_STYLES: google.maps.MapTypeStyle[] = [
