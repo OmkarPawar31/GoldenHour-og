@@ -10,10 +10,16 @@ import HospitalCard from "../../components/HospitalCard";
 import RouteInfoBar from "../../components/RouteInfoBar";
 import { haversineMeters } from "../../utils/geoUtils";
 import { Location, Hospital } from "../../types";
+import { useToast } from "../../hooks/useToast";
+import DashboardStats from "../../components/DashboardStats";
+import HospitalSearch from "../../components/HospitalSearch";
+import { useAmbulanceSimulation } from "../../hooks/useAmbulanceSimulation";
+import { useJsApiLoader } from "@react-google-maps/api";
 
 const MapView = dynamic(() => import("../../components/MapView"), { ssr: false });
 
 const FALLBACK_GPS: Location = { lat: 18.9894, lng: 73.1175 };
+const DEFAULT_HOSPITAL = { lat: 18.9904, lng: 73.1165 };
 
 export default function AmbulancePage() {
   const { location, error: gpsError } = useLocation();
@@ -23,13 +29,16 @@ export default function AmbulancePage() {
   const demoMode = !location && gpsFallbackTriggered;
   const origin = location || (gpsFallbackTriggered ? FALLBACK_GPS : null);
 
-<<<<<<< HEAD
   const [destination, setDestination] = useState(DEFAULT_HOSPITAL);
   const [destinationName, setDestinationName] = useState("MGM Hospital Panvel");
   const [routePoints, setRoutePoints] = useState<{ lat: number; lng: number }[]>([]);
   const [directionsResult, setDirectionsResult] = useState<google.maps.DirectionsResult | null>(null);
   const [isEmergencyActive, setIsEmergencyActive] = useState(false);
-=======
+  const { toasts, showToast, dismissToast } = useToast();
+  const realGpsLocation = origin || FALLBACK_GPS;
+  const activeEmergencies = isEmergencyActive ? 1 : 0;
+  const greenSignalsActivated = isEmergencyActive ? 4 : 0;
+
   useEffect(() => {
     let timer: NodeJS.Timeout;
     if (!location) {
@@ -39,12 +48,15 @@ export default function AmbulancePage() {
     }
     return () => clearTimeout(timer);
   }, [location]);
->>>>>>> feat/greencorridor
 
   const { hospitals, fetchHospitals, resetAndRetry, loading: searchingHospitals, error: hospitalsError } = useNearbyHospitals();
   const { directions, routeInfo, fetchRoute } = useDirectionsRoute();
+  const { isLoaded } = useJsApiLoader({
+    id: "google-map-script",
+    googleMapsApiKey: process.env.NEXT_PUBLIC_GOOGLE_MAPS_API_KEY || "",
+    libraries: ["places", "geometry"],
+  });
 
-<<<<<<< HEAD
   // Use Maps DirectionsService directly for the route
   const generateRoute = async (origin: { lat: number; lng: number }, dest: { lat: number; lng: number }) => {
     return new Promise<{ path: { lat: number; lng: number }[]; result: google.maps.DirectionsResult }>((resolve, reject) => {
@@ -76,22 +88,35 @@ export default function AmbulancePage() {
           }
         }
       );
-=======
+    });
+  };
+
   const [selectedHospitalId, setSelectedHospitalId] = useState<string | null>(null);
   const hospitalsFetched = useRef(false);
   const lastRerouteTime = useRef<number>(0);
 
-  // BUG 3: Auto-select nearest hospital when hospitals list changes (fix setState during render)
+  // Auto-select nearest hospital when hospitals list changes
   useEffect(() => {
     if (hospitals.length === 0) return;
     setSelectedHospitalId((prev) => {
       const stillExists = hospitals.find((h) => h.id === prev);
       return stillExists ? prev : hospitals[0].id;
->>>>>>> feat/greencorridor
     });
   }, [hospitals]);
 
-<<<<<<< HEAD
+  const selectedHospital = hospitals.find(h => h.id === selectedHospitalId) || null;
+
+  const handleMapLoad = useCallback((map: google.maps.Map) => {
+    setMapInstance(map);
+  }, []);
+
+  // Fetch hospitals once when origin is ready
+  useEffect(() => {
+    if (!origin || hospitalsFetched.current) return;
+    hospitalsFetched.current = true;
+    fetchHospitals(null, origin);
+  }, [origin, fetchHospitals]);
+
   const sim = useAmbulanceSimulation({
     routePoints,
     realGpsLocation,
@@ -100,61 +125,40 @@ export default function AmbulancePage() {
     onRecalculate: async (lat, lng) => {
       showToast("Recalculating route from new position...", "warning");
       try {
-        const { path: newPath, result: newResult } = await generateRoute({ lat, lng }, destination);
-        setRoutePoints(newPath);
-        setDirectionsResult(newResult);
+        const routeData = await generateRoute({ lat, lng }, destination);
+        setRoutePoints(routeData.path);
+        setDirectionsResult(routeData.result);
       } catch (_) {
         showToast("Failed to recalculate route", "warning");
-=======
-  const selectedHospital = hospitals.find(h => h.id === selectedHospitalId) || null;
-
-  const handleMapLoad = useCallback((map: google.maps.Map) => {
-    setMapInstance(map);
-  }, []);
-
-  // BUG 2: Fetch hospitals once when both mapInstance and origin are ready
-  useEffect(() => {
-    if (!origin || hospitalsFetched.current) return;
-    hospitalsFetched.current = true;
-    fetchHospitals(null, origin);
-  }, [origin, fetchHospitals]);
-
-  // FIX 2: When user clicks a hospital card → immediately route to it
-  const handleHospitalSelect = useCallback(
-    (h: Hospital) => {
-      setSelectedHospitalId(h.id);
-      if (origin && mapInstance) {
-        fetchRoute(origin, h.location); // pass h.location directly, not via state
->>>>>>> feat/greencorridor
       }
-    },
-    [origin, mapInstance, fetchRoute]
-  );
+    }
+  });
+  const handleHospitalSelect = (hospital: { lat: number; lng: number; name: string; address: string } | Hospital) => {
+    // Adapter to work with both types
+    const h = 'id' in hospital 
+      ? { lat: hospital.location.lat, lng: hospital.location.lng, name: hospital.name, address: (hospital as any).vicinity || "" }
+      : hospital;
 
-<<<<<<< HEAD
-  const handleHospitalSelect = (hospital: { lat: number; lng: number; name: string; address: string }) => {
-    setDestination(hospital);
-    setDestinationName(hospital.name);
-    showToast(`🏥 Destination changed to ${hospital.name}`, "success");
+    setDestination({ lat: h.lat, lng: h.lng });
+    setDestinationName(h.name);
+    showToast(`🏥 Destination changed to ${h.name}`, "success");
+    
+    // Also sync the selected id if it came from a card
+    if ('id' in hospital) {
+      setSelectedHospitalId(hospital.id);
+      if (origin && mapInstance && !directions) {
+        fetchRoute(origin, hospital.location);
+      }
+    }
   };
 
   const handleActivate = async () => {
     try {
       showToast("Activating Green Corridor System...", "info");
 
-      // Try hitting the backend first
-      let pathFromBackend = null;
-      try {
-        const res = await triggerEmergency({ origin: realGpsLocation, destination });
-        if (res && res.route && res.route.path && res.route.path.length > 0) {
-          pathFromBackend = res.route.path;
-        }
-      } catch (err) {
-        console.warn("Backend emergency call failed, falling back to local simulation", err);
-      }
-
+      // Removed backend trigger function that was deleted in other branch
+      
       // Always generate a DirectionsResult client-side for road-following display
-      // Even if backend provided a path, we need the DirectionsResult for proper road rendering
       showToast("Generating optimal dispatch route...", "info");
       const routeData = await generateRoute(realGpsLocation, destination);
       const finalPath = routeData.path;
@@ -166,16 +170,17 @@ export default function AmbulancePage() {
       showToast("Emergency Activated! System Live.", "success");
     } catch (err) {
       showToast(`Failed to generate route: ${err}`, "warning");
-=======
+    }
+  };
+
   // FIX 2: Route useEffect — only for auto-route on first hospital load
   useEffect(() => {
     if (!origin || !selectedHospital || !mapInstance) return;
     // Only auto-route if no route exists yet (first load)
     if (!directions) {
       fetchRoute(origin, selectedHospital.location);
->>>>>>> feat/greencorridor
     }
-  }, [selectedHospital, mapInstance]); // Do NOT include fetchRoute or origin in deps
+  }, [selectedHospital, mapInstance, origin, directions, fetchRoute]);
 
   // BUG 4: Live rerouting with cooldown to prevent infinite loop
   useEffect(() => {
@@ -206,18 +211,18 @@ export default function AmbulancePage() {
     alert(`Emergency started for ${selectedHospital?.name}`);
   };
 
-<<<<<<< HEAD
+  // ----------------------------------------------------------------  
   const handleCancel = async () => {
     showToast("Terminating Green Corridor...", "warning");
-    await cancelEmergency();
+    // Removed cancelEmergency since it was part of backend call that failed
     setIsEmergencyActive(false);
     setRoutePoints([]);
     setDirectionsResult(null);
     sim.resetSimulation();
-=======
+  };
+
   const handleChangeHospital = () => {
     document.getElementById("hospital-cards-panel")?.scrollIntoView({ behavior: 'smooth' });
->>>>>>> feat/greencorridor
   };
 
   if (!origin && !gpsFallbackTriggered) {
@@ -230,7 +235,6 @@ export default function AmbulancePage() {
   }
 
   return (
-<<<<<<< HEAD
     <div className="min-h-screen bg-[#050B14] text-white flex flex-col font-sans overflow-hidden relative">
       {/* Ambient background effects */}
       <div className="fixed inset-0 pointer-events-none z-0">
@@ -239,7 +243,17 @@ export default function AmbulancePage() {
         <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[800px] h-[800px] bg-red-600/[0.02] rounded-full blur-[150px]" />
       </div>
 
-      <ToastContainer toasts={toasts} onDismiss={dismissToast} />
+      {/* Toast Messages UI using traditional Next.js methods */}
+      <div className="fixed bottom-4 right-4 z-[100] flex flex-col gap-2 pointer-events-none">
+        {toasts.map((toast) => (
+          <div key={toast.id} className={`px-4 py-3 rounded-xl shadow-lg border backdrop-blur-md flex items-center gap-3 animate-in slide-in-from-right pointer-events-auto ${toast.type === "success" ? "bg-emerald-500/20 border-emerald-500/50 text-emerald-100" : toast.type === "warning" ? "bg-amber-500/20 border-amber-500/50 text-amber-100" : toast.type === "error" ? "bg-red-500/20 border-red-500/50 text-red-100" : "bg-blue-500/20 border-blue-500/50 text-blue-100"}`}>
+            <span className="text-sm font-medium">{toast.message}</span>
+            <button onClick={() => dismissToast(toast.id)} className="p-1 hover:bg-white/10 rounded-lg transition-colors">
+              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" /></svg>
+            </button>
+          </div>
+        ))}
+      </div>
 
       {/* Top Header & Actions — Glassmorphism */}
       <header className="h-auto border-b border-white/[0.08] bg-white/[0.03] backdrop-blur-xl px-6 py-4 z-50 shadow-[0_4px_30px_rgba(0,0,0,0.3)] relative overflow-hidden">
@@ -274,10 +288,10 @@ export default function AmbulancePage() {
             {!isEmergencyActive ? (
               <button
                 onClick={handleActivate}
-                disabled={loading || !isLoaded}
+                disabled={searchingHospitals || !isLoaded}
                 className="w-full lg:w-auto px-8 py-2.5 bg-gradient-to-r from-red-600 to-red-500 hover:from-red-500 hover:to-red-400 disabled:opacity-50 disabled:cursor-not-allowed text-white font-bold tracking-widest text-sm uppercase rounded-lg shadow-[0_0_20px_rgba(220,38,38,0.4),0_0_60px_rgba(220,38,38,0.15)] hover:shadow-[0_0_30px_rgba(220,38,38,0.6),0_0_80px_rgba(220,38,38,0.25)] transition-all duration-300 flex items-center justify-center gap-2 whitespace-nowrap border border-red-500/30"
               >
-                {loading || !isLoaded ? (
+                {searchingHospitals || !isLoaded ? (
                   <div className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" />
                 ) : (
                   "⚡ Activate"
@@ -286,7 +300,7 @@ export default function AmbulancePage() {
             ) : (
               <button
                 onClick={handleCancel}
-                disabled={loading}
+                disabled={searchingHospitals}
                 className="w-full lg:w-auto px-8 py-2.5 bg-gray-900/60 hover:bg-gray-800/80 disabled:opacity-50 disabled:cursor-not-allowed text-gray-300 border border-gray-600/50 font-bold tracking-widest text-sm uppercase rounded-lg transition-all duration-300 whitespace-nowrap backdrop-blur-sm"
               >
                 ⏹ Terminate
@@ -309,7 +323,7 @@ export default function AmbulancePage() {
         </div>
 
         {/* Middle/Bottom: Split View */}
-        <div className="flex-1 flex max-lg:flex-col gap-4 min-h-0">
+        <div className="flex-1 flex flex-col lg:flex-row gap-4 min-h-0">
           {/* Main Map Area */}
           <div className="flex-[2] lg:flex-[3] rounded-xl overflow-hidden shadow-[0_0_40px_rgba(0,0,0,0.3)] bg-[#0a0e1a]">
             {isLoaded ? (
@@ -317,13 +331,14 @@ export default function AmbulancePage() {
                 ambulancePosition={sim.ambulancePosition || realGpsLocation}
                 destination={destination}
                 routePoints={routePoints}
-                directionsResult={directionsResult}
                 trafficSignals={sim.trafficSignals}
                 isEmergencyActive={isEmergencyActive}
                 bearing={sim.bearing}
                 destinationName={destinationName}
                 etaMinutes={sim.etaMinutes}
                 remainingDistanceM={sim.remainingDistanceM}
+                directions={directionsResult}
+                onMapLoad={handleMapLoad}
               />
             ) : (
               <div className="w-full h-full flex flex-col items-center justify-center border border-gray-800 rounded-xl">
@@ -334,67 +349,41 @@ export default function AmbulancePage() {
               </div>
             )}
           </div>
-=======
-    <div className="min-h-screen bg-[#050B14] flex flex-col font-sans h-screen">
-      <header className="h-16 shrink-0 border-b border-gray-800 bg-[#0a0e1a]/90 flex flex-col md:flex-row md:items-center px-6 z-50 justify-center md:justify-start">
-        <h1 className="text-xl font-bold tracking-widest text-white uppercase flex items-center gap-2">
-          <span className="text-red-500">🚑</span> GoldenHour
-          <span className="text-gray-500 font-light ml-2 border-l border-gray-700 pl-3">
-            AMBULANCE MAP
-          </span>
-        </h1>
-        {gpsError && !demoMode && <span className="text-red-500 text-[10px] md:text-xs font-mono md:ml-4">{gpsError}</span>}
-      </header>
 
-      <div className="flex-1 flex flex-col lg:flex-row overflow-hidden relative">
-        <div className="w-full lg:w-[65%] shrink-0 lg:h-full flex flex-col p-4 relative justify-start">
-          {origin && (
-            <MapView
-              origin={origin}
-              hospitals={hospitals}
-              selectedHospitalId={selectedHospitalId}
-              directions={directions}
-              routeInfo={routeInfo}
-              isDemoMode={demoMode}
-              onMapLoad={handleMapLoad}
-              onHospitalSelect={handleHospitalSelect}
-            />
-          )}
-        </div>
+          {/* Right Panel: Hospital Cards */}
+          <div id="hospital-cards-panel" className="flex-[1] lg:w-[35%] lg:h-full overflow-y-auto p-4 flex flex-col gap-4 border-t lg:border-t-0 lg:border-l border-gray-800 bg-[#050B14]">
+            <h2 className="text-white font-bold tracking-widest uppercase mb-1 text-sm flex items-center justify-between">
+              <span>Nearby Hospitals</span>
+              {searchingHospitals && <span className="w-3 h-3 border-2 border-blue-500/30 border-t-blue-500 rounded-full animate-spin"></span>}
+            </h2>
 
-        <div id="hospital-cards-panel" className="w-full lg:w-[35%] lg:h-full overflow-y-auto p-4 flex flex-col gap-4 border-t lg:border-t-0 lg:border-l border-gray-800 bg-[#050B14]">
-          <h2 className="text-white font-bold tracking-widest uppercase mb-1 text-sm flex items-center justify-between">
-            <span>Nearby Hospitals</span>
-            {searchingHospitals && <span className="w-3 h-3 border-2 border-blue-500/30 border-t-blue-500 rounded-full animate-spin"></span>}
-          </h2>
->>>>>>> feat/greencorridor
+            {hospitals.map((h, i) => (
+              <HospitalCard
+                key={h.id}
+                hospital={h}
+                isNearest={i === 0}
+                isSelected={h.id === selectedHospitalId}
+                onSelect={(hospital) => handleHospitalSelect(hospital)}
+              />
+            ))}
 
-          {hospitals.map((h, i) => (
-            <HospitalCard
-              key={h.id}
-              hospital={h}
-              isNearest={i === 0}
-              isSelected={h.id === selectedHospitalId}
-              onSelect={handleHospitalSelect}
-            />
-          ))}
-
-          {hospitals.length === 0 && !searchingHospitals && (
-            <div className="flex flex-col gap-2">
-              <p className="text-gray-500 text-sm italic py-2">
-                {hospitalsError || "No hospitals found nearby."}
-              </p>
-              {origin && (
-                <button
-                  onClick={() => resetAndRetry(mapInstance, origin)}
-                  className="px-4 py-2 bg-blue-600 hover:bg-blue-700 
-                    text-white text-xs font-bold rounded-lg w-fit"
-                >
-                  RETRY
-                </button>
-              )}
-            </div>
-          )}
+            {hospitals.length === 0 && !searchingHospitals && (
+              <div className="flex flex-col gap-2">
+                <p className="text-gray-500 text-sm italic py-2">
+                  {hospitalsError || "No hospitals found nearby."}
+                </p>
+                {origin && (
+                  <button
+                    onClick={() => resetAndRetry(mapInstance, origin)}
+                    className="px-4 py-2 bg-blue-600 hover:bg-blue-700 
+                      text-white text-xs font-bold rounded-lg w-fit"
+                  >
+                    RETRY
+                  </button>
+                )}
+              </div>
+            )}
+          </div>
         </div>
       </div>
 

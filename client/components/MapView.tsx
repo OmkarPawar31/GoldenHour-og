@@ -2,7 +2,7 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
-import { GoogleMap, Marker, Polyline, OverlayView, useJsApiLoader } from "@react-google-maps/api";
+import { GoogleMap, Marker, Polyline, OverlayView } from "@react-google-maps/api";
 
 export interface TrafficSignal {
   id: string;
@@ -19,6 +19,10 @@ interface MapViewProps {
   isEmergencyActive: boolean;
   bearing?: number;
   destinationName?: string;
+  etaMinutes?: number;
+  remainingDistanceM?: number;
+  directions?: google.maps.DirectionsResult | null;
+  onMapLoad?: (map: google.maps.Map) => void;
 }
 
 const mapContainerStyle = {
@@ -65,6 +69,20 @@ const mapOptions: google.maps.MapOptions = {
   ]
 };
 
+/* ── Helper formatters for the floating info panel ── */
+function formatTime(minutes: number): string {
+  if (minutes < 1) return "< 1 min";
+  if (minutes < 60) return `${Math.round(minutes)} min`;
+  const h = Math.floor(minutes / 60);
+  const m = Math.round(minutes % 60);
+  return m > 0 ? `${h}h ${m}min` : `${h}h`;
+}
+
+function formatDist(meters: number): string {
+  if (meters >= 1000) return `${(meters / 1000).toFixed(1)} km`;
+  return `${Math.round(meters)} m`;
+}
+
 export default function MapView({
   ambulancePosition,
   destination,
@@ -73,60 +91,27 @@ export default function MapView({
   isEmergencyActive,
   bearing = 0,
   destinationName,
+  etaMinutes,
+  remainingDistanceM,
+  directions,
+  onMapLoad,
 }: MapViewProps) {
-  const { isLoaded, loadError } = useJsApiLoader({
-    id: "google-map-script",
-    googleMapsApiKey: process.env.NEXT_PUBLIC_GOOGLE_MAPS_API_KEY || "",
-    libraries: LIBRARIES,
-  });
-
   const mapRef = useRef<google.maps.Map | null>(null);
-
-  // BUG 1: Define icons after isLoaded check to avoid window.google crash
-  const ambulanceIcon = isLoaded
-    ? {
-        path: google.maps.SymbolPath.CIRCLE,
-        scale: 8,
-        fillColor: "#3B82F6",
-        fillOpacity: 1,
-        strokeColor: "#ffffff",
-        strokeWeight: 2,
-      }
-    : undefined;
-
-  const hospitalSelectedIcon = isLoaded
-    ? {
-        path: "M 0,0 C -2,-20 -10,-22 -10,-30 A 10,10 0 1,1 10,-30 C 10,-22 2,-20 0,0 z",
-        fillColor: "#EF4444",
-        fillOpacity: 1,
-        strokeColor: "#000000",
-        strokeWeight: 1,
-        scale: 1,
-        labelOrigin: new google.maps.Point(0, -30),
-      }
-    : undefined;
-
-  const hospitalDefaultIcon = isLoaded
-    ? {
-        path: google.maps.SymbolPath.CIRCLE,
-        scale: 6,
-        fillColor: "#94A3B8",
-        fillOpacity: 1,
-        strokeColor: "#000000",
-        strokeWeight: 1,
-      }
-    : undefined;
+  const prevDestinationRef = useRef<{ lat: number; lng: number } | null>(null);
+  const [isAnimatingDestination, setIsAnimatingDestination] = useState(false);
 
   const onLoad = (map: google.maps.Map) => {
     mapRef.current = map;
-    onMapLoad(map);
+    if (onMapLoad) {
+      onMapLoad(map);
+    }
   };
 
   const onUnmount = () => {
     mapRef.current = null;
   };
 
-  // FIX 4: fitBounds on route load to show full route
+  // fitBounds on route load to show full route
   useEffect(() => {
     if (mapRef.current && directions) {
       const route = directions.routes[0];
@@ -136,7 +121,7 @@ export default function MapView({
     }
   }, [directions]);
 
-  // FIX 4: pan to current location during navigation
+  // Pan to destination when it changes
   useEffect(() => {
     if (!mapRef.current || !destination) return;
 
@@ -172,17 +157,6 @@ export default function MapView({
     return () => clearTimeout(timer);
   }, [destination]);
 
-  if (!isLoaded) {
-    return (
-      <div className="w-full h-[60vh] bg-[#0a0e1a] border border-gray-800 rounded-xl relative overflow-hidden flex items-center justify-center">
-        <div className="flex flex-col items-center gap-4">
-          <div className="w-10 h-10 border-4 border-[#2979FF]/30 border-t-[#2979FF] rounded-full animate-spin" />
-          <p className="font-mono text-gray-500 text-sm tracking-widest uppercase">Initializing Map System...</p>
-        </div>
-      </div>
-    );
-  }
-
   const center = ambulancePosition || destination || defaultCenter;
 
   return (
@@ -192,8 +166,8 @@ export default function MapView({
         center={center}
         zoom={15}
         options={mapOptions}
-        onLoad={(map) => { mapRef.current = map; }}
-        onUnmount={() => { mapRef.current = null; }}
+        onLoad={onLoad}
+        onUnmount={onUnmount}
       >
         {/* Render Route Polyline */}
         {isEmergencyActive && routePoints.length > 0 && (
@@ -212,13 +186,11 @@ export default function MapView({
         {trafficSignals.map((signal) => {
           let color = "#ff4444";
           let scale = 7;
-          let glow = false;
           let zIndex = 2;
 
           if (signal.status === "green") {
             color = "#00e676";
             scale = 9;
-            glow = true;
             zIndex = 3;
           } else if (signal.status === "passed") {
             color = "#555555";

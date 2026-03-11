@@ -6,7 +6,7 @@ import { useState, useCallback, useRef } from "react";
 export interface Toast {
     id: string;
     message: string;
-    type: "success" | "warning" | "info";
+    type: "success" | "warning" | "info" | "error";
 }
 
 export function useToast() {
