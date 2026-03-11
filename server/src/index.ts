@@ -9,6 +9,7 @@ import emergencyRoutes from "./routes/emergency.routes";
 import userRoutes from "./routes/user.routes";
 import adminRoutes from "./routes/admin.routes";
 import trackingRoutes from "./routes/tracking.routes";
+import hospitalRoutes from "./routes/hospital.routes";
 import { errorHandler } from "./middleware/error.middleware";
 
 const app = express();
@@ -23,6 +24,7 @@ app.use("/api/emergency", emergencyRoutes);
 app.use("/api/users", userRoutes);
 app.use("/api/admin", adminRoutes);
 app.use("/api/tracking", trackingRoutes);
+app.use("/api/hospital", hospitalRoutes);
 
 // Error handler
 app.use(errorHandler);

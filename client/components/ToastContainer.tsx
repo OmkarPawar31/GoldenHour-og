@@ -24,6 +24,11 @@ const typeStyles: Record<Toast["type"], { bg: string; border: string; icon: stri
         border: "border-sky-500/40",
         icon: "ℹ",
     },
+    error: {
+        bg: "bg-red-950/90",
+        border: "border-red-500/40",
+        icon: "✕",
+    },
 };
 
 export default function ToastContainer({ toasts, onDismiss }: ToastContainerProps) {
