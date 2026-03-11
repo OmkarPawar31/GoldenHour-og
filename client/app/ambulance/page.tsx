@@ -32,13 +32,14 @@ export default function AmbulancePage() {
   const [destination, setDestination] = useState(DEFAULT_HOSPITAL);
   const [destinationName, setDestinationName] = useState("MGM Hospital Panvel");
   const [routePoints, setRoutePoints] = useState<{ lat: number; lng: number }[]>([]);
+  const [directionsResult, setDirectionsResult] = useState<google.maps.DirectionsResult | null>(null);
   const [isEmergencyActive, setIsEmergencyActive] = useState(false);
 
   const realGpsLocation = gpsLoc || FALLBACK_GPS;
 
-  // Use Maps DirectionsService directly for the route if backend doesn't provide it
+  // Use Maps DirectionsService directly for the route
   const generateRoute = async (origin: { lat: number; lng: number }, dest: { lat: number; lng: number }) => {
-    return new Promise<{ lat: number; lng: number }[]>((resolve, reject) => {
+    return new Promise<{ path: { lat: number; lng: number }[]; result: google.maps.DirectionsResult }>((resolve, reject) => {
       if (!window.google || !window.google.maps) return reject("Google Maps not loaded");
 
       const svc = new window.google.maps.DirectionsService();
@@ -60,7 +61,7 @@ export default function AmbulancePage() {
                   });
               }
             });
-            resolve(path);
+            resolve({ path, result });
           } else {
             console.error("Directions request failed due to " + status);
             reject(status);
@@ -78,8 +79,9 @@ export default function AmbulancePage() {
     onRecalculate: async (lat, lng) => {
       showToast("Recalculating route from new position...", "warning");
       try {
-        const newPath = await generateRoute({ lat, lng }, destination);
+        const { path: newPath, result: newResult } = await generateRoute({ lat, lng }, destination);
         setRoutePoints(newPath);
+        setDirectionsResult(newResult);
       } catch (_) {
         showToast("Failed to recalculate route", "warning");
       }
@@ -107,14 +109,15 @@ export default function AmbulancePage() {
         console.warn("Backend emergency call failed, falling back to local simulation", err);
       }
 
-      // If backend didn't provide a route, generate one client-side
-      let finalPath = pathFromBackend;
-      if (!finalPath) {
-        showToast("Generating optimal dispatch route...", "info");
-        finalPath = await generateRoute(realGpsLocation, destination);
-      }
+      // Always generate a DirectionsResult client-side for road-following display
+      // Even if backend provided a path, we need the DirectionsResult for proper road rendering
+      showToast("Generating optimal dispatch route...", "info");
+      const routeData = await generateRoute(realGpsLocation, destination);
+      const finalPath = routeData.path;
+      const finalDirections = routeData.result;
 
       setRoutePoints(finalPath);
+      setDirectionsResult(finalDirections);
       setIsEmergencyActive(true);
       showToast("Emergency Activated! System Live.", "success");
     } catch (err) {
@@ -127,6 +130,7 @@ export default function AmbulancePage() {
     await cancelEmergency();
     setIsEmergencyActive(false);
     setRoutePoints([]);
+    setDirectionsResult(null);
     sim.resetSimulation();
   };
 
@@ -135,17 +139,27 @@ export default function AmbulancePage() {
   const greenSignalsActivated = sim.greenSignalCount;
 
   return (
-    <div className="min-h-screen bg-[#050B14] text-white flex flex-col font-sans overflow-hidden">
+    <div className="min-h-screen bg-[#050B14] text-white flex flex-col font-sans overflow-hidden relative">
+      {/* Ambient background effects */}
+      <div className="fixed inset-0 pointer-events-none z-0">
+        <div className="absolute top-0 left-1/4 w-[600px] h-[600px] bg-blue-600/[0.03] rounded-full blur-[120px]" />
+        <div className="absolute bottom-0 right-1/4 w-[500px] h-[500px] bg-purple-600/[0.03] rounded-full blur-[120px]" />
+        <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[800px] h-[800px] bg-red-600/[0.02] rounded-full blur-[150px]" />
+      </div>
+
       <ToastContainer toasts={toasts} onDismiss={dismissToast} />
 
-      {/* Top Header & Actions */}
-      <header className="h-auto border-b border-gray-800 bg-[#0a0e1a]/90 px-6 py-4 z-50 shadow-md">
-        <div className="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-4">
+      {/* Top Header & Actions — Glassmorphism */}
+      <header className="h-auto border-b border-white/[0.08] bg-white/[0.03] backdrop-blur-xl px-6 py-4 z-50 shadow-[0_4px_30px_rgba(0,0,0,0.3)] relative overflow-hidden">
+        {/* Header gradient accent line */}
+        <div className="absolute top-0 left-0 right-0 h-[2px] bg-gradient-to-r from-transparent via-red-500/60 to-transparent" />
+
+        <div className="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-4 relative z-10">
           {/* Left: Title */}
           <div className="flex flex-col min-w-0">
             <h1 className="text-xl font-bold tracking-widest text-white uppercase flex items-center gap-2 whitespace-nowrap">
-              <span className="text-red-500">🚑</span> GoldenHour
-              <span className="text-gray-500 font-light ml-2 border-l border-gray-700 pl-3">
+              <span className="text-red-500 drop-shadow-[0_0_8px_rgba(239,68,68,0.6)]">🚑</span> GoldenHour
+              <span className="text-gray-500 font-light ml-2 border-l border-gray-700/50 pl-3">
                 DISPATCH
               </span>
             </h1>
@@ -169,7 +183,7 @@ export default function AmbulancePage() {
               <button
                 onClick={handleActivate}
                 disabled={loading || !isLoaded}
-                className="w-full lg:w-auto px-6 py-2 bg-red-600 hover:bg-red-500 disabled:opacity-50 disabled:cursor-not-allowed text-white font-bold tracking-widest text-sm uppercase rounded shadow-[0_0_15px_rgba(220,38,38,0.5)] transition-all flex items-center justify-center gap-2 whitespace-nowrap"
+                className="w-full lg:w-auto px-8 py-2.5 bg-gradient-to-r from-red-600 to-red-500 hover:from-red-500 hover:to-red-400 disabled:opacity-50 disabled:cursor-not-allowed text-white font-bold tracking-widest text-sm uppercase rounded-lg shadow-[0_0_20px_rgba(220,38,38,0.4),0_0_60px_rgba(220,38,38,0.15)] hover:shadow-[0_0_30px_rgba(220,38,38,0.6),0_0_80px_rgba(220,38,38,0.25)] transition-all duration-300 flex items-center justify-center gap-2 whitespace-nowrap border border-red-500/30"
               >
                 {loading || !isLoaded ? (
                   <div className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" />
@@ -181,7 +195,7 @@ export default function AmbulancePage() {
               <button
                 onClick={handleCancel}
                 disabled={loading}
-                className="w-full lg:w-auto px-6 py-2 bg-gray-800 hover:bg-gray-700 disabled:opacity-50 disabled:cursor-not-allowed text-gray-300 border border-gray-700 font-bold tracking-widest text-sm uppercase rounded transition-all whitespace-nowrap"
+                className="w-full lg:w-auto px-8 py-2.5 bg-gray-900/60 hover:bg-gray-800/80 disabled:opacity-50 disabled:cursor-not-allowed text-gray-300 border border-gray-600/50 font-bold tracking-widest text-sm uppercase rounded-lg transition-all duration-300 whitespace-nowrap backdrop-blur-sm"
               >
                 ⏹ Terminate
               </button>
@@ -191,7 +205,7 @@ export default function AmbulancePage() {
       </header>
 
       {/* Main Content Area */}
-      <div className="flex-1 flex flex-col p-4 gap-4 overflow-hidden">
+      <div className="flex-1 flex flex-col p-4 gap-4 overflow-hidden relative z-10">
         {/* Top: Stats Bar */}
         <div className="shrink-0">
           <DashboardStats
@@ -205,16 +219,19 @@ export default function AmbulancePage() {
         {/* Middle/Bottom: Split View */}
         <div className="flex-1 flex max-lg:flex-col gap-4 min-h-0">
           {/* Main Map Area */}
-          <div className="flex-[2] lg:flex-[3] rounded-xl overflow-hidden shadow-2xl bg-[#0a0e1a]">
+          <div className="flex-[2] lg:flex-[3] rounded-xl overflow-hidden shadow-[0_0_40px_rgba(0,0,0,0.3)] bg-[#0a0e1a]">
             {isLoaded ? (
               <MapView
                 ambulancePosition={sim.ambulancePosition || realGpsLocation}
                 destination={destination}
                 routePoints={routePoints}
+                directionsResult={directionsResult}
                 trafficSignals={sim.trafficSignals}
                 isEmergencyActive={isEmergencyActive}
                 bearing={sim.bearing}
                 destinationName={destinationName}
+                etaMinutes={sim.etaMinutes}
+                remainingDistanceM={sim.remainingDistanceM}
               />
             ) : (
               <div className="w-full h-full flex flex-col items-center justify-center border border-gray-800 rounded-xl">
