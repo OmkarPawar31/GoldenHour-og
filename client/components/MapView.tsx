@@ -1,23 +1,9 @@
 // components/MapView.tsx
 "use client";
 
-import { useEffect, useRef } from "react";
-import { useJsApiLoader, GoogleMap, DirectionsRenderer, Marker, Polyline } from "@react-google-maps/api";
-import { Location, Hospital, RouteInfo } from "../types";
-
-const LIBRARIES: ("geometry" | "places")[] = ["geometry", "places"];
-
-const MAP_STYLES = [
-  { elementType: "geometry", stylers: [{ color: "#0f172a" }] },
-  { elementType: "labels.text.fill", stylers: [{ color: "#94a3b8" }] },
-  { elementType: "labels.text.stroke", stylers: [{ color: "#0f172a" }] },
-  { featureType: "road", elementType: "geometry", stylers: [{ color: "#1e293b" }] },
-  { featureType: "road.highway", elementType: "geometry", stylers: [{ color: "#334155" }] },
-  { featureType: "water", elementType: "geometry", stylers: [{ color: "#020617" }] },
-  { featureType: "poi", stylers: [{ visibility: "off" }] },
-];
 import { useEffect, useRef, useState } from "react";
-import { GoogleMap, Marker, Polyline, OverlayView } from "@react-google-maps/api";
+import { GoogleMap, Marker, Polyline, OverlayView, DirectionsRenderer } from "@react-google-maps/api";
+import { Location, Hospital, RouteInfo } from "../types";
 
 export interface TrafficSignal {
   id: string;
@@ -26,17 +12,32 @@ export interface TrafficSignal {
   status: "red" | "green" | "passed";
 }
 
-interface MapViewProps {
-  ambulancePosition: { lat: number; lng: number } | null;
-  destination: { lat: number; lng: number } | null;
-  routePoints: { lat: number; lng: number }[];
-  trafficSignals: TrafficSignal[];
-  isEmergencyActive: boolean;
-  bearing?: number;
+export interface MapViewProps {
+  // Core positions
+  origin?: Location | null;
+  ambulancePosition?: Location | { lat: number; lng: number } | null;
+  destination?: { lat: number; lng: number } | null;
   destinationName?: string;
+
+  // Hospital data
+  hospitals?: Hospital[];
+  selectedHospitalId?: string | null;
+  onHospitalSelect?: (hospital: Hospital) => void;
+
+  // Route data
+  routePoints?: { lat: number; lng: number }[];
+  routeInfo?: RouteInfo | null;
+  directions?: google.maps.DirectionsResult | null;
+
+  // Simulation data
+  trafficSignals?: TrafficSignal[];
+  isEmergencyActive?: boolean;
+  bearing?: number;
   etaMinutes?: number;
   remainingDistanceM?: number;
-  directions?: google.maps.DirectionsResult | null;
+  isDemoMode?: boolean;
+
+  // Callbacks
   onMapLoad?: (map: google.maps.Map) => void;
 }
 
@@ -45,16 +46,6 @@ const mapContainerStyle = {
   height: "100%",
 };
 
-interface MapViewProps {
-  origin: Location;
-  hospitals: Hospital[];
-  selectedHospitalId: string | null;
-  directions: google.maps.DirectionsResult | null;
-  routeInfo: RouteInfo | null;
-  isDemoMode: boolean;
-  onMapLoad: (map: google.maps.Map) => void;
-  onHospitalSelect: (hospital: Hospital) => void;
-  ambulancePosition?: Location;
 // Fallback center if everything else fails (Panvel)
 const defaultCenter = { lat: 18.9894, lng: 73.1175 };
 
@@ -90,8 +81,8 @@ const mapOptions: google.maps.MapOptions = {
     { featureType: "transit.line", elementType: "geometry.fill", stylers: [{ color: "#283d6a" }] },
     { featureType: "transit.station", elementType: "geometry", stylers: [{ color: "#3a4762" }] },
     { featureType: "water", elementType: "geometry", stylers: [{ color: "#0e1626" }] },
-    { featureType: "water", elementType: "labels.text.fill", stylers: [{ color: "#4e6d70" }] }
-  ]
+    { featureType: "water", elementType: "labels.text.fill", stylers: [{ color: "#4e6d70" }] },
+  ],
 };
 
 /* ── Helper formatters for the floating info panel ── */
@@ -109,19 +100,22 @@ function formatDist(meters: number): string {
 }
 
 export default function MapView({
+  origin,
   ambulancePosition,
   destination,
-  routePoints,
-  trafficSignals,
-  isEmergencyActive,
-  bearing = 0,
   destinationName,
+  hospitals = [],
+  selectedHospitalId,
+  onHospitalSelect,
+  routePoints = [],
+  routeInfo,
+  directions,
+  trafficSignals = [],
+  isEmergencyActive = false,
+  bearing = 0,
   etaMinutes,
   remainingDistanceM,
-  directions,
   onMapLoad,
-  onHospitalSelect,
-  ambulancePosition
 }: MapViewProps) {
   const mapRef = useRef<google.maps.Map | null>(null);
   const prevDestinationRef = useRef<{ lat: number; lng: number } | null>(null);
@@ -141,18 +135,18 @@ export default function MapView({
   // fitBounds on route load to show full route
   useEffect(() => {
     if (mapRef.current) {
-        if (directions) {
-          const route = directions.routes[0];
-          if (route && route.bounds) {
-            mapRef.current.fitBounds(route.bounds, { top: 80, left: 40, right: 40, bottom: 160 });
-          }
-        } else if (routeInfo && routeInfo.routePoints.length > 0) {
-            const bounds = new window.google.maps.LatLngBounds();
-            routeInfo.routePoints.forEach(p => {
-                bounds.extend(new window.google.maps.LatLng(p.lat, p.lng));
-            });
-            mapRef.current.fitBounds(bounds, { top: 80, left: 40, right: 40, bottom: 160 });
+      if (directions) {
+        const route = directions.routes[0];
+        if (route && route.bounds) {
+          mapRef.current.fitBounds(route.bounds, { top: 80, left: 40, right: 40, bottom: 160 });
         }
+      } else if (routeInfo && routeInfo.routePoints.length > 0) {
+        const bounds = new window.google.maps.LatLngBounds();
+        routeInfo.routePoints.forEach((p) => {
+          bounds.extend(new window.google.maps.LatLng(p.lat, p.lng));
+        });
+        mapRef.current.fitBounds(bounds, { top: 80, left: 40, right: 40, bottom: 160 });
+      }
     }
   }, [directions, routeInfo]);
 
@@ -173,18 +167,14 @@ export default function MapView({
 
     // Trigger smooth pan and zoom animation
     setIsAnimatingDestination(true);
-
-    // Pan to destination with smooth animation
     mapRef.current.panTo(destination);
 
-    // Zoom in on destination
     setTimeout(() => {
       if (mapRef.current) {
         mapRef.current.setZoom(17);
       }
     }, 300);
 
-    // End animation state after 1.5 seconds
     const timer = setTimeout(() => {
       setIsAnimatingDestination(false);
     }, 1500);
@@ -192,7 +182,7 @@ export default function MapView({
     return () => clearTimeout(timer);
   }, [destination]);
 
-  const center = ambulancePosition || destination || defaultCenter;
+  const center = ambulancePosition || origin || destination || defaultCenter;
 
   return (
     <div className="w-full h-full rounded-xl overflow-hidden border border-gray-800 shadow-2xl relative">
@@ -204,48 +194,41 @@ export default function MapView({
         onLoad={onLoad}
         onUnmount={onUnmount}
       >
+        {/* Origin marker (when no ambulance simulation is running) */}
         {origin && !ambulancePosition && (
           <Marker
             position={origin}
-            icon={ambulanceIcon}
-            zIndex={200}
-          />
-        )}
-        
-        {ambulancePosition && (
-          <Marker
-            position={ambulancePosition}
-            icon={ambulanceIcon}
+            icon={{
+              path: google.maps.SymbolPath.CIRCLE,
+              fillColor: "#2979FF",
+              fillOpacity: 1,
+              strokeColor: "#ffffff",
+              strokeWeight: 3,
+              scale: 8,
+            }}
             zIndex={200}
           />
         )}
 
-        {hospitals.map(h => (
+        {/* Hospital markers */}
+        {hospitals.map((h) => (
           <Marker
             key={h.id}
             position={h.location}
-            onClick={() => onHospitalSelect(h)}
-            icon={h.id === selectedHospitalId ? hospitalSelectedIcon : hospitalDefaultIcon}
+            onClick={() => onHospitalSelect?.(h)}
+            icon={{
+              path: google.maps.SymbolPath.CIRCLE,
+              fillColor: h.id === selectedHospitalId ? "#ff4444" : "#4285F4",
+              fillOpacity: 1,
+              strokeColor: "#ffffff",
+              strokeWeight: 2,
+              scale: h.id === selectedHospitalId ? 10 : 7,
+            }}
             zIndex={h.id === selectedHospitalId ? 100 : 1}
           />
         ))}
 
-        {/* FIX 2: White border polyline behind route for outline effect */}
-        {routeInfo && routeInfo.routePoints.length > 0 && (
-        {/* Render Route Polyline */}
-        {isEmergencyActive && routePoints.length > 0 && (
-          <Polyline
-            path={routePoints}
-            options={{
-              strokeColor: "#2979FF",
-              strokeWeight: 6,
-              strokeOpacity: 0.9,
-              zIndex: 1,
-            }}
-          />
-        )}
-
-        {/* Custom blue style polyline because we bypassed DirectionsRenderer */}
+        {/* Route polyline from routeInfo (non-emergency preview) */}
         {routeInfo && routeInfo.routePoints.length > 0 && !directions && (
           <Polyline
             path={routeInfo.routePoints}
@@ -254,6 +237,19 @@ export default function MapView({
               strokeWeight: 6,
               strokeOpacity: 1.0,
               zIndex: 10,
+            }}
+          />
+        )}
+
+        {/* Route polyline for emergency simulation */}
+        {isEmergencyActive && routePoints.length > 0 && (
+          <Polyline
+            path={routePoints}
+            options={{
+              strokeColor: "#2979FF",
+              strokeWeight: 6,
+              strokeOpacity: 0.9,
+              zIndex: 1,
             }}
           />
         )}
@@ -273,6 +269,8 @@ export default function MapView({
               },
             }}
           />
+        )}
+
         {/* Render Traffic Signals */}
         {trafficSignals.map((signal) => {
           let color = "#ff4444";
