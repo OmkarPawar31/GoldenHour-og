@@ -5,7 +5,7 @@ import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 
 type Role = "ambulance" | "private" | "driver" | "admin" | "hospital";
-type Mode = "login" | "register";
+
 
 const ROLES = [
     { key: "ambulance" as Role, icon: "🚑", label: "Ambulance", desc: "Emergency services vehicle", color: "#E8571A", priority: "P-100" },
@@ -458,7 +458,7 @@ function AuthContent() {
                             Join the <span>Corridor</span><br />Network.
                         </h2>
                         <p className="left-sub">
-                            Every role matters. Whether you're driving the ambulance or clearing the path — you're part of saving a life.
+                            Every role matters. Whether you&apos;re driving the ambulance or clearing the path — you&apos;re part of saving a life.
                         </p>
                         <div className="mini-stats">
                             {[
