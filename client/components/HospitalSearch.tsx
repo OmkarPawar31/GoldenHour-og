@@ -121,8 +121,8 @@ export default function HospitalSearch({ onHospitalSelect, isLoaded, currentLoca
         if (placeResult?.geometry?.location) {
           const lat = placeResult.geometry.location.lat();
           const lng = placeResult.geometry.location.lng();
-          const name = placeResult.name || prediction.main_text;
-          const address = placeResult.formatted_address || prediction.description;
+          const name = placeResult.name || prediction.main_text || "Unknown Hospital";
+          const address = placeResult.formatted_address || prediction.description || "Unknown Address";
 
           // Trigger selection with smooth animation
           onHospitalSelect({ lat, lng, name, address });

@@ -1,271 +1,198 @@
 // components/MapView.tsx
 "use client";
 
-import { useEffect, useRef, useState } from "react";
-import { GoogleMap, Marker, Polyline, OverlayView, useJsApiLoader } from "@react-google-maps/api";
+import { useEffect, useRef } from "react";
+import { useJsApiLoader, GoogleMap, DirectionsRenderer, Marker, Polyline } from "@react-google-maps/api";
+import { Location, Hospital, RouteInfo } from "../types";
 
-export interface TrafficSignal {
-  id: string;
-  lat: number;
-  lng: number;
-  status: "red" | "green" | "passed";
-}
+const LIBRARIES: ("geometry")[] = ["geometry"];
 
-interface MapViewProps {
-  ambulancePosition: { lat: number; lng: number } | null;
-  destination: { lat: number; lng: number } | null;
-  routePoints: { lat: number; lng: number }[];
-  trafficSignals: TrafficSignal[];
-  isEmergencyActive: boolean;
-  bearing?: number;
-  destinationName?: string;
-}
+const MAP_STYLES = [
+  { elementType: "geometry", stylers: [{ color: "#0f172a" }] },
+  { elementType: "labels.text.fill", stylers: [{ color: "#94a3b8" }] },
+  { elementType: "labels.text.stroke", stylers: [{ color: "#0f172a" }] },
+  { featureType: "road", elementType: "geometry", stylers: [{ color: "#1e293b" }] },
+  { featureType: "road.highway", elementType: "geometry", stylers: [{ color: "#334155" }] },
+  { featureType: "water", elementType: "geometry", stylers: [{ color: "#020617" }] },
+  { featureType: "poi", stylers: [{ visibility: "off" }] },
+];
 
 const mapContainerStyle = {
   width: "100%",
   height: "100%",
 };
 
-// Fallback center if everything else fails (Panvel)
-const defaultCenter = { lat: 18.9894, lng: 73.1175 };
-
-// Aubergine Dark Theme
-const mapOptions: google.maps.MapOptions = {
-  disableDefaultUI: false,
-  mapTypeControl: false,
-  streetViewControl: false,
-  styles: [
-    { elementType: "geometry", stylers: [{ color: "#1d2c4d" }] },
-    { elementType: "labels.text.fill", stylers: [{ color: "#8ec3b9" }] },
-    { elementType: "labels.text.stroke", stylers: [{ color: "#1a3646" }] },
-    { featureType: "administrative.country", elementType: "geometry.stroke", stylers: [{ color: "#4b6878" }] },
-    { featureType: "administrative.land_parcel", elementType: "labels.text.fill", stylers: [{ color: "#64779e" }] },
-    { featureType: "administrative.province", elementType: "geometry.stroke", stylers: [{ color: "#4b6878" }] },
-    { featureType: "landscape.man_made", elementType: "geometry.stroke", stylers: [{ color: "#334e87" }] },
-    { featureType: "landscape.natural", elementType: "geometry", stylers: [{ color: "#023e58" }] },
-    { featureType: "poi", elementType: "geometry", stylers: [{ color: "#283d6a" }] },
-    { featureType: "poi", elementType: "labels.text.fill", stylers: [{ color: "#6f9ba5" }] },
-    { featureType: "poi", elementType: "labels.text.stroke", stylers: [{ color: "#1d2c4d" }] },
-    { featureType: "poi", stylers: [{ visibility: "off" }] },
-    { featureType: "poi.park", elementType: "geometry.fill", stylers: [{ color: "#023e58" }] },
-    { featureType: "poi.park", elementType: "labels.text.fill", stylers: [{ color: "#3C7680" }] },
-    { featureType: "road", elementType: "geometry", stylers: [{ color: "#304a7d" }] },
-    { featureType: "road", elementType: "labels.text.fill", stylers: [{ color: "#98a5be" }] },
-    { featureType: "road", elementType: "labels.text.stroke", stylers: [{ color: "#1d2c4d" }] },
-    { featureType: "road.highway", elementType: "geometry", stylers: [{ color: "#2c6675" }] },
-    { featureType: "road.highway", elementType: "geometry.stroke", stylers: [{ color: "#255763" }] },
-    { featureType: "road.highway", elementType: "labels.text.fill", stylers: [{ color: "#b0d5ce" }] },
-    { featureType: "road.highway", elementType: "labels.text.stroke", stylers: [{ color: "#023e58" }] },
-    { featureType: "transit", elementType: "labels.text.fill", stylers: [{ color: "#98a5be" }] },
-    { featureType: "transit", elementType: "labels.text.stroke", stylers: [{ color: "#1d2c4d" }] },
-    { featureType: "transit.line", elementType: "geometry.fill", stylers: [{ color: "#283d6a" }] },
-    { featureType: "transit.station", elementType: "geometry", stylers: [{ color: "#3a4762" }] },
-    { featureType: "water", elementType: "geometry", stylers: [{ color: "#0e1626" }] },
-    { featureType: "water", elementType: "labels.text.fill", stylers: [{ color: "#4e6d70" }] }
-  ]
-};
+interface MapViewProps {
+  origin: Location;
+  hospitals: Hospital[];
+  selectedHospitalId: string | null;
+  directions: google.maps.DirectionsResult | null;
+  routeInfo: RouteInfo | null;
+  isDemoMode: boolean;
+  onMapLoad: (map: google.maps.Map) => void;
+  onHospitalSelect: (hospital: Hospital) => void;
+}
 
 export default function MapView({
-  ambulancePosition,
-  destination,
-  routePoints,
-  trafficSignals,
-  isEmergencyActive,
-  bearing = 0,
-  destinationName,
+  origin,
+  hospitals,
+  selectedHospitalId,
+  directions,
+  routeInfo,
+  isDemoMode,
+  onMapLoad,
+  onHospitalSelect
 }: MapViewProps) {
-  const { isLoaded } = useJsApiLoader({
+  const { isLoaded, loadError } = useJsApiLoader({
     id: "google-map-script",
     googleMapsApiKey: process.env.NEXT_PUBLIC_GOOGLE_MAPS_API_KEY || "",
-    libraries: ["geometry", "places"],
+    libraries: LIBRARIES,
   });
 
   const mapRef = useRef<google.maps.Map | null>(null);
-  const [isAnimatingDestination, setIsAnimatingDestination] = useState(false);
-  const prevDestinationRef = useRef<{ lat: number; lng: number } | null>(null);
 
-  // Smooth animation when ambulance position changes
-  useEffect(() => {
-    if (mapRef.current && ambulancePosition) {
-      mapRef.current.panTo(ambulancePosition);
-    }
-  }, [ambulancePosition]);
-
-  // Smooth animation when destination changes
-  useEffect(() => {
-    if (!mapRef.current || !destination) return;
-
-    // Check if destination actually changed
-    if (
-      prevDestinationRef.current &&
-      prevDestinationRef.current.lat === destination.lat &&
-      prevDestinationRef.current.lng === destination.lng
-    ) {
-      return;
-    }
-
-    prevDestinationRef.current = destination;
-
-    // Trigger smooth pan and zoom animation
-    setIsAnimatingDestination(true);
-
-    // Pan to destination with smooth animation
-    mapRef.current.panTo(destination);
-
-    // Zoom in on destination
-    setTimeout(() => {
-      if (mapRef.current) {
-        mapRef.current.setZoom(17);
+  // BUG 1: Define icons after isLoaded check to avoid window.google crash
+  const ambulanceIcon = isLoaded
+    ? {
+        path: google.maps.SymbolPath.CIRCLE,
+        scale: 8,
+        fillColor: "#3B82F6",
+        fillOpacity: 1,
+        strokeColor: "#ffffff",
+        strokeWeight: 2,
       }
-    }, 300);
+    : undefined;
 
-    // End animation state after 1.5 seconds
-    const timer = setTimeout(() => {
-      setIsAnimatingDestination(false);
-    }, 1500);
+  const hospitalSelectedIcon = isLoaded
+    ? {
+        path: "M 0,0 C -2,-20 -10,-22 -10,-30 A 10,10 0 1,1 10,-30 C 10,-22 2,-20 0,0 z",
+        fillColor: "#EF4444",
+        fillOpacity: 1,
+        strokeColor: "#000000",
+        strokeWeight: 1,
+        scale: 1,
+        labelOrigin: new google.maps.Point(0, -30),
+      }
+    : undefined;
 
-    return () => clearTimeout(timer);
-  }, [destination]);
+  const hospitalDefaultIcon = isLoaded
+    ? {
+        path: google.maps.SymbolPath.CIRCLE,
+        scale: 6,
+        fillColor: "#94A3B8",
+        fillOpacity: 1,
+        strokeColor: "#000000",
+        strokeWeight: 1,
+      }
+    : undefined;
 
-  if (!isLoaded) {
+  const onLoad = (map: google.maps.Map) => {
+    mapRef.current = map;
+    onMapLoad(map);
+  };
+
+  const onUnmount = () => {
+    mapRef.current = null;
+  };
+
+  // FIX 4: fitBounds on route load to show full route
+  useEffect(() => {
+    if (mapRef.current && directions) {
+      const route = directions.routes[0];
+      if (route && route.bounds) {
+        mapRef.current.fitBounds(route.bounds, { top: 80, left: 40, right: 40, bottom: 160 });
+      }
+    }
+  }, [directions]);
+
+  // FIX 4: pan to current location during navigation
+  useEffect(() => {
+    if (mapRef.current && origin && !directions) {
+      mapRef.current.panTo(origin);
+    }
+  }, [origin, directions]);
+
+  if (loadError) {
     return (
-      <div className="w-full h-[60vh] bg-[#0a0e1a] border border-gray-800 rounded-xl relative overflow-hidden flex items-center justify-center">
-        <div className="flex flex-col items-center gap-4">
-          <div className="w-10 h-10 border-4 border-[#2979FF]/30 border-t-[#2979FF] rounded-full animate-spin" />
-          <p className="font-mono text-gray-500 text-sm tracking-widest uppercase">Initializing Map System...</p>
-        </div>
+      <div className="w-full h-full flex items-center justify-center bg-[#0a0e1a] border border-red-900 rounded-xl">
+        <div className="text-red-500 font-mono text-center p-4">Error loading maps: {loadError.message}</div>
       </div>
     );
   }
 
-  const center = ambulancePosition || destination || defaultCenter;
+  if (!isLoaded) {
+    return (
+      <div className="w-full h-[65vh] flex items-center justify-center bg-[#0a0e1a] border border-gray-800 rounded-xl animate-pulse">
+        <div className="w-8 h-8 border-4 border-blue-500/30 border-t-blue-500 rounded-full animate-spin"></div>
+      </div>
+    );
+  }
 
   return (
-    <div className="w-full h-full rounded-xl overflow-hidden border border-gray-800 shadow-2xl relative">
+    <div className="relative w-full h-[65vh] rounded-xl overflow-hidden shadow-2xl bg-[#0a0e1a]">
+      {isDemoMode && (
+        <div className="absolute top-4 left-4 z-10 px-3 py-1 bg-yellow-500/20 border border-yellow-500/50 text-yellow-500 text-xs font-bold tracking-widest uppercase rounded shadow backdrop-blur-sm pointer-events-none">
+          Demo Mode
+        </div>
+      )}
       <GoogleMap
         mapContainerStyle={mapContainerStyle}
-        center={center}
-        zoom={15}
-        options={mapOptions}
-        onLoad={(map) => { mapRef.current = map; }}
-        onUnmount={() => { mapRef.current = null; }}
+        center={origin}
+        zoom={14}
+        onLoad={onLoad}
+        onUnmount={onUnmount}
+        options={{
+          styles: MAP_STYLES,
+          disableDefaultUI: true,
+          zoomControl: true,
+        }}
       >
-        {/* Render Route Polyline */}
-        {isEmergencyActive && routePoints.length > 0 && (
+        {origin && (
+          <Marker
+            position={origin}
+            icon={ambulanceIcon}
+            zIndex={200}
+          />
+        )}
+
+        {hospitals.map(h => (
+          <Marker
+            key={h.id}
+            position={h.location}
+            onClick={() => onHospitalSelect(h)}
+            icon={h.id === selectedHospitalId ? hospitalSelectedIcon : hospitalDefaultIcon}
+            zIndex={h.id === selectedHospitalId ? 100 : 1}
+          />
+        ))}
+
+        {/* FIX 2: White border polyline behind route for outline effect */}
+        {directions && routeInfo && routeInfo.routePoints.length > 0 && (
           <Polyline
-            path={routePoints}
+            path={routeInfo.routePoints}
             options={{
-              strokeColor: "#2979FF",
-              strokeWeight: 6,
-              strokeOpacity: 0.9,
-              zIndex: 1,
+              strokeColor: "#FFFFFF",
+              strokeWeight: 10,
+              strokeOpacity: 0.3,
+              zIndex: 9,
             }}
           />
         )}
 
-        {/* Render Traffic Signals */}
-        {trafficSignals.map((signal) => {
-          let color = "#ff4444";
-          let scale = 7;
-          let glow = false;
-          let zIndex = 2;
-
-          if (signal.status === "green") {
-            color = "#00e676";
-            scale = 9;
-            glow = true;
-            zIndex = 3;
-          } else if (signal.status === "passed") {
-            color = "#555555";
-            scale = 5;
-            zIndex = 1;
-          }
-
-          return (
-            <Marker
-              key={signal.id}
-              position={{ lat: signal.lat, lng: signal.lng }}
-              zIndex={zIndex}
-              icon={{
-                path: google.maps.SymbolPath.CIRCLE,
-                fillColor: color,
-                fillOpacity: signal.status === "passed" ? 0.6 : 1,
-                strokeColor: "#ffffff",
-                strokeWeight: signal.status === "passed" ? 1 : 2,
-                scale: scale,
-              }}
-            />
-          );
-        })}
-
-        {/* Green Signal Pulse Overlays */}
-        {trafficSignals.map((signal) => {
-          if (signal.status !== "green") return null;
-          return (
-            <OverlayView
-              key={`pulse-${signal.id}`}
-              position={{ lat: signal.lat, lng: signal.lng }}
-              mapPaneName={OverlayView.OVERLAY_MOUSE_TARGET}
-            >
-              <div className="absolute top-0 left-0 -translate-x-1/2 -translate-y-1/2 pointer-events-none">
-                <div className="w-20 h-20 rounded-full border-2 border-[#00e676] animate-ping opacity-60" />
-              </div>
-            </OverlayView>
-          );
-        })}
-
-        {/* Destination Marker */}
-        {destination && (
-          <OverlayView
-            position={destination}
-            mapPaneName={OverlayView.OVERLAY_MOUSE_TARGET}
-          >
-            <div className="absolute top-0 left-0 -translate-x-1/2 -translate-y-[100%] drop-shadow-lg">
-              {/* Glow effect when destination is animated */}
-              {isAnimatingDestination && (
-                <div className="absolute -inset-3 bg-red-500/30 rounded-full animate-pulse pointer-events-none" />
-              )}
-              <div className={`w-8 h-8 bg-red-600 rounded-full border-2 border-white flex items-center justify-center relative shadow-lg transition-all duration-300 ${
-                isAnimatingDestination ? "scale-110 shadow-[0_0_20px_rgba(220,38,38,0.8)]" : ""
-              }`}>
-                <span className="text-white font-bold font-mono text-sm">H</span>
-                {/* Pointer tip */}
-                <div className="absolute -bottom-2 w-0 h-0 border-l-[6px] border-l-transparent border-r-[6px] border-r-transparent border-t-[8px] border-t-red-600" />
-              </div>
-              {/* Hospital name tooltip */}
-              {isAnimatingDestination && destinationName && (
-                <div className="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 px-2 py-1 bg-red-600 text-white text-xs font-mono rounded whitespace-nowrap animate-in fade-in slide-in-from-bottom-2 duration-300">
-                  {destinationName}
-                </div>
-              )}
-            </div>
-          </OverlayView>
-        )}
-
-        {/* Ambulance Marker */}
-        {ambulancePosition && (
-          <OverlayView
-            position={ambulancePosition}
-            mapPaneName={OverlayView.OVERLAY_MOUSE_TARGET}
-          >
-            <div className="absolute top-0 left-0 -translate-x-1/2 -translate-y-1/2 z-[100] drop-shadow-2xl">
-              {/* Pulse Ring */}
-              <div className="absolute inset-[-15px] bg-red-500/20 rounded-full animate-ping pointer-events-none" />
-              <div className="absolute inset-[-8px] border border-red-500/50 rounded-full animate-ping pointer-events-none" style={{ animationDelay: "0.5s" }} />
-
-              {/* Custom SVG Ambulance rotating */}
-              <div
-                className="w-8 h-8 bg-white rounded-full border-[3px] border-red-600 flex items-center justify-center transition-transform duration-[1500ms] ease-linear shadow-[0_0_15px_rgba(255,59,59,0.5)]"
-                style={{ transform: `rotate(${bearing}deg)` }}
-              >
-                {/* Cross */}
-                <div className="relative w-4 h-4">
-                  <div className="absolute top-1/2 left-0 w-full h-[4px] -translate-y-1/2 bg-red-600" />
-                  <div className="absolute left-1/2 top-0 h-full w-[4px] -translate-x-1/2 bg-red-600" />
-                </div>
-              </div>
-            </div>
-          </OverlayView>
+        {/* FIX 2: Main route with Google Maps blue styling and DirectionsRenderer */}
+        {directions && (
+          <DirectionsRenderer
+            directions={directions}
+            options={{
+              suppressMarkers: true,
+              suppressInfoWindows: true,
+              polylineOptions: {
+                strokeColor: "#4285F4",
+                strokeWeight: 6,
+                strokeOpacity: 1.0,
+                zIndex: 10,
+              },
+            }}
+          />
         )}
       </GoogleMap>
     </div>
