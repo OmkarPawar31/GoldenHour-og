@@ -39,3 +39,10 @@ yarn-error.log*
 # typescript
 *.tsbuildinfo
 next-env.d.ts
+
+# server
+server/dist/
+
+# temp backup files
+old_*.tsx
+osrm_test.json
