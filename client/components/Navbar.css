@@ -1,0 +1,323 @@
+/* ═══════════════════════════════════════════════════════════
+   GoldenHour — Shared Navbar
+   ═══════════════════════════════════════════════════════════ */
+
+.gh-navbar {
+  position: sticky;
+  top: 0;
+  z-index: 100;
+  height: 56px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0 1.5rem;
+  background: rgba(255, 255, 255, 0.92);
+  backdrop-filter: blur(18px);
+  -webkit-backdrop-filter: blur(18px);
+  border-bottom: 1px solid #E2E8F0;
+  box-shadow: 0 1px 8px rgba(0, 0, 0, 0.04);
+  font-family: 'DM Sans', system-ui, sans-serif;
+}
+
+/* ── Logo ── */
+.gh-nav-logo {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  text-decoration: none;
+  flex-shrink: 0;
+}
+
+.gh-nav-logo-dot {
+  width: 10px;
+  height: 10px;
+  background: #E8571A;
+  border-radius: 50%;
+  box-shadow: 0 0 8px rgba(232, 87, 26, 0.5);
+  animation: gh-nav-blink 2s ease-in-out infinite;
+}
+
+@keyframes gh-nav-blink {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.35; }
+}
+
+.gh-nav-logo-text {
+  font-weight: 800;
+  font-size: 1.1rem;
+  color: #1E293B;
+  letter-spacing: -0.01em;
+}
+
+.gh-nav-logo-text span {
+  color: #E8571A;
+}
+
+/* ── Desktop links ── */
+.gh-nav-links {
+  display: flex;
+  align-items: center;
+  gap: 0.35rem;
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.gh-nav-links a {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  padding: 0.45rem 0.85rem;
+  border-radius: 8px;
+  font-size: 0.84rem;
+  font-weight: 500;
+  color: #64748B;
+  text-decoration: none;
+  transition: all 0.2s ease;
+  white-space: nowrap;
+}
+
+.gh-nav-links a:hover {
+  background: #FFF7ED;
+  color: #E8571A;
+}
+
+.gh-nav-links a.active {
+  background: rgba(232, 87, 26, 0.08);
+  color: #E8571A;
+  font-weight: 600;
+}
+
+.gh-nav-links a .nav-icon {
+  font-size: 0.95rem;
+  line-height: 1;
+}
+
+/* ── Auth buttons (logged out) ── */
+.gh-nav-auth {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.gh-nav-btn-login {
+  padding: 0.45rem 1rem;
+  border-radius: 8px;
+  font-size: 0.84rem;
+  font-weight: 600;
+  color: #64748B;
+  text-decoration: none;
+  border: 1.5px solid #E2E8F0;
+  background: #fff;
+  transition: all 0.2s ease;
+}
+
+.gh-nav-btn-login:hover {
+  color: #E8571A;
+  border-color: rgba(232, 87, 26, 0.3);
+  background: #FFF7ED;
+}
+
+.gh-nav-btn-register {
+  padding: 0.5rem 1.1rem;
+  border-radius: 8px;
+  font-size: 0.84rem;
+  font-weight: 700;
+  color: #fff;
+  text-decoration: none;
+  background: #E8571A;
+  box-shadow: 0 2px 12px rgba(232, 87, 26, 0.3);
+  transition: all 0.25s ease;
+}
+
+.gh-nav-btn-register:hover {
+  background: #C2410C;
+  transform: translateY(-1px);
+  box-shadow: 0 4px 20px rgba(232, 87, 26, 0.4);
+}
+
+/* ── Logout button ── */
+.gh-nav-logout {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  padding: 0.45rem 0.85rem;
+  border-radius: 8px;
+  font-size: 0.84rem;
+  font-weight: 500;
+  color: #64748B;
+  text-decoration: none;
+  background: none;
+  border: 1.5px solid #E2E8F0;
+  cursor: pointer;
+  font-family: 'DM Sans', system-ui, sans-serif;
+  transition: all 0.2s ease;
+}
+
+.gh-nav-logout:hover {
+  background: rgba(239, 68, 68, 0.06);
+  color: #EF4444;
+  border-color: rgba(239, 68, 68, 0.25);
+}
+
+/* ── Divider ── */
+.gh-nav-divider {
+  width: 1px;
+  height: 24px;
+  background: #E2E8F0;
+  margin: 0 0.35rem;
+  flex-shrink: 0;
+}
+
+/* ── Role badge ── */
+.gh-nav-role-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.3rem;
+  padding: 0.2rem 0.55rem;
+  border-radius: 5px;
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 0.6rem;
+  font-weight: 600;
+  letter-spacing: 0.07em;
+  text-transform: uppercase;
+  background: rgba(232, 87, 26, 0.08);
+  color: #E8571A;
+  border: 1px solid rgba(232, 87, 26, 0.15);
+}
+
+/* ── Hamburger ── */
+.gh-nav-hamburger {
+  display: none;
+  width: 36px;
+  height: 36px;
+  border-radius: 8px;
+  border: 1.5px solid #E2E8F0;
+  background: #fff;
+  cursor: pointer;
+  align-items: center;
+  justify-content: center;
+  flex-direction: column;
+  gap: 4px;
+  padding: 0;
+  transition: all 0.2s;
+}
+
+.gh-nav-hamburger:hover {
+  border-color: rgba(232, 87, 26, 0.3);
+  background: #FFF7ED;
+}
+
+.gh-nav-hamburger span {
+  display: block;
+  width: 16px;
+  height: 2px;
+  background: #64748B;
+  border-radius: 1px;
+  transition: all 0.3s ease;
+}
+
+.gh-nav-hamburger.open span:nth-child(1) {
+  transform: rotate(45deg) translate(4px, 4px);
+}
+
+.gh-nav-hamburger.open span:nth-child(2) {
+  opacity: 0;
+}
+
+.gh-nav-hamburger.open span:nth-child(3) {
+  transform: rotate(-45deg) translate(4px, -4px);
+}
+
+/* ── Desktop right group ── */
+.gh-nav-right {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+/* ── Mobile dropdown ── */
+.gh-nav-mobile-menu {
+  display: none;
+  position: absolute;
+  top: 56px;
+  left: 0;
+  right: 0;
+  background: rgba(255, 255, 255, 0.97);
+  backdrop-filter: blur(18px);
+  -webkit-backdrop-filter: blur(18px);
+  border-bottom: 1px solid #E2E8F0;
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.08);
+  padding: 0.75rem 1rem;
+  flex-direction: column;
+  gap: 0.25rem;
+  z-index: 99;
+  animation: gh-nav-slideDown 0.2s ease;
+}
+
+@keyframes gh-nav-slideDown {
+  from { opacity: 0; transform: translateY(-8px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+.gh-nav-mobile-menu.open {
+  display: flex;
+}
+
+.gh-nav-mobile-menu a,
+.gh-nav-mobile-menu button {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.65rem 0.85rem;
+  border-radius: 8px;
+  font-size: 0.88rem;
+  font-weight: 500;
+  color: #64748B;
+  text-decoration: none;
+  background: none;
+  border: none;
+  cursor: pointer;
+  font-family: 'DM Sans', system-ui, sans-serif;
+  width: 100%;
+  text-align: left;
+  transition: all 0.15s ease;
+}
+
+.gh-nav-mobile-menu a:hover,
+.gh-nav-mobile-menu button:hover {
+  background: #FFF7ED;
+  color: #E8571A;
+}
+
+.gh-nav-mobile-menu a.active {
+  background: rgba(232, 87, 26, 0.08);
+  color: #E8571A;
+  font-weight: 600;
+}
+
+.gh-nav-mobile-divider {
+  height: 1px;
+  background: #E2E8F0;
+  margin: 0.35rem 0;
+}
+
+/* ── Responsive ── */
+@media (max-width: 768px) {
+  .gh-nav-links,
+  .gh-nav-auth,
+  .gh-nav-divider,
+  .gh-nav-role-badge,
+  .gh-nav-logout {
+    display: none;
+  }
+
+  .gh-nav-hamburger {
+    display: flex;
+  }
+}
+
+/* ── Body offset (applied to pages using the shared nav) ── */
+.gh-has-navbar {
+  /* Navbar is sticky so no padding needed, but children can reference this */
+}

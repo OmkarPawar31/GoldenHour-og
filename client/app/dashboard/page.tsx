@@ -105,37 +105,7 @@ export default function DashboardPage() {
 
         .dash-wrap { min-height: 100vh; background: var(--cream); }
 
-        /* Topbar */
-        .dash-topbar {
-          display: flex; align-items: center; justify-content: space-between;
-          padding: 0 32px; height: 64px;
-          background: #fff;
-          border-bottom: 1px solid var(--border);
-          box-shadow: 0 1px 8px rgba(0,0,0,0.04);
-          position: sticky; top: 0; z-index: 50;
-        }
-        .dash-logo {
-          display: flex; align-items: center; gap: 10px;
-          font-weight: 800; font-size: 1.1rem; color: var(--text);
-          text-decoration: none;
-        }
-        .dash-logo-dot {
-          width: 10px; height: 10px; background: var(--orange);
-          border-radius: 50%; box-shadow: 0 0 8px rgba(232,87,26,0.5);
-          animation: blink 2s ease-in-out infinite;
-        }
-        @keyframes blink { 0%,100%{opacity:1} 50%{opacity:0.4} }
-        .dash-logo span { color: var(--orange); }
 
-        .dash-topbar-actions { display: flex; gap: 10px; align-items: center; }
-        .dash-topbar-actions a, .dash-topbar-actions button {
-          padding: 7px 16px; border-radius: 8px; font-size: 0.84rem; cursor: pointer;
-          border: 1.5px solid var(--border); background: #fff;
-          color: var(--muted); text-decoration: none;
-          transition: all 0.2s; font-family: 'DM Sans', sans-serif; font-weight: 500;
-        }
-        .dash-topbar-actions a:hover { background: var(--warm); color: var(--orange); border-color: rgba(232,87,26,0.25); }
-        .dash-topbar-actions button:hover { background: rgba(239,68,68,0.06); color: var(--red); border-color: rgba(239,68,68,0.2); }
 
         .dash-body { padding: 36px 32px; max-width: 1100px; margin: 0 auto; }
 
@@ -270,17 +240,7 @@ export default function DashboardPage() {
       `}</style>
 
       <div className="dash-wrap">
-        <div className="dash-topbar">
-          <Link href="/" className="dash-logo">
-            <div className="dash-logo-dot" />
-            Golden<span>Hour</span>
-          </Link>
-          <div className="dash-topbar-actions">
-            <Link href="/">Home</Link>
-            {role === "admin" && <Link href="/admin">Admin</Link>}
-            <button onClick={handleLogout}>Logout</button>
-          </div>
-        </div>
+
 
         <div className="dash-body">
           {loading ? (

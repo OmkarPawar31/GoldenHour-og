@@ -72,87 +72,7 @@ export default function HomePage() {
           100% { transform: translate(25px, 18px) scale(1.05); }
         }
 
-        /* Status ticker */
-        .ticker-wrap {
-          position: fixed; top: 0; left: 0; right: 0; z-index: 100;
-          display: flex; align-items: center; gap: 1rem;
-          padding: 0.4rem 1.5rem;
-          background: rgba(255,255,255,0.85);
-          backdrop-filter: blur(12px);
-          border-bottom: 1px solid rgba(232,87,26,0.15);
-          box-shadow: 0 1px 8px rgba(0,0,0,0.04);
-        }
-        .ticker-live {
-          display: flex; align-items: center; gap: 0.4rem;
-          font-family: 'JetBrains Mono', monospace;
-          font-size: 0.68rem; color: #059669; flex-shrink: 0; font-weight: 600;
-        }
-        .ticker-dot {
-          width: 6px; height: 6px; background: #059669;
-          border-radius: 50%;
-          animation: blink 1.2s ease-in-out infinite;
-        }
-        .ticker-track {
-          display: flex; gap: 3rem;
-          font-family: 'JetBrains Mono', monospace;
-          font-size: 0.68rem; color: var(--muted);
-          white-space: nowrap;
-          animation: ticker 22s linear infinite;
-        }
-        @keyframes ticker {
-          from { transform: translateX(0); }
-          to   { transform: translateX(-50%); }
-        }
 
-        /* Navbar */
-        .navbar {
-          position: fixed; top: 30px; left: 0; right: 0; z-index: 90;
-          display: flex; align-items: center; justify-content: space-between;
-          padding: 1rem 3rem;
-          background: rgba(255,251,245,0.9);
-          backdrop-filter: blur(20px);
-          border-bottom: 1px solid rgba(232,87,26,0.12);
-          box-shadow: 0 2px 20px rgba(232,87,26,0.06);
-          animation: slideDown 0.8s ease both;
-        }
-        @keyframes slideDown {
-          from { transform: translateY(-100%); opacity: 0; }
-          to   { transform: translateY(0); opacity: 1; }
-        }
-
-        /* Logo */
-        .logo-wrap { display: flex; align-items: center; gap: 0.6rem; text-decoration: none; }
-        .logo-icon { position: relative; width: 36px; height: 36px; display: flex; align-items: center; justify-content: center; }
-        .logo-ring {
-          position: absolute; width: 36px; height: 36px;
-          border: 2px solid var(--orange); border-radius: 50%;
-          animation: logoPulse 2s ease-out infinite;
-        }
-        .logo-ring:nth-child(2) { animation-delay: 0.7s; }
-        @keyframes logoPulse {
-          0%   { transform: scale(0.5); opacity: 1; }
-          100% { transform: scale(2.5); opacity: 0; }
-        }
-        .logo-dot {
-          width: 10px; height: 10px; background: var(--orange);
-          border-radius: 50%; z-index: 1; position: relative;
-          box-shadow: 0 0 12px rgba(232,87,26,0.5);
-        }
-        .logo-text {
-          font-family: 'Bebas Neue', cursive;
-          font-size: 1.6rem; letter-spacing: 0.08em; color: var(--text);
-        }
-        .logo-text span { color: var(--orange); }
-
-        /* Nav links */
-        .nav-links { display: flex; gap: 2rem; list-style: none; }
-        .nav-links a {
-          color: var(--muted); text-decoration: none;
-          font-size: 0.82rem; font-weight: 500;
-          letter-spacing: 0.06em; text-transform: uppercase;
-          transition: color 0.2s;
-        }
-        .nav-links a:hover { color: var(--orange); }
 
         /* Buttons */
         .btn {
@@ -178,7 +98,7 @@ export default function HomePage() {
           min-height: 100vh;
           display: flex; align-items: center; justify-content: center;
           position: relative; z-index: 1;
-          padding: 9rem 3rem 4rem;
+          padding: 4rem 3rem 4rem;
         }
         .hero-inner {
           max-width: 1200px; width: 100%;
@@ -545,58 +465,7 @@ export default function HomePage() {
       <div className="orb" style={{ width: 500, height: 500, background: "rgba(245,158,11,0.06)", bottom: "10%", left: -150, animationDelay: "-6s" }} />
       <div className="orb" style={{ width: 300, height: 300, background: "rgba(59,130,246,0.05)", top: "40%", right: "5%", animationDelay: "-3s" }} />
 
-      {/* Status ticker */}
-      <div className="ticker-wrap">
-        <div className="ticker-live">
-          <div className="ticker-dot" />
-          LIVE
-        </div>
-        <div style={{ overflow: "hidden", flex: 1 }}>
-          <div className="ticker-track">
-            {[
-              "Real-time GPS tracking enabled",
-              "Green corridor protocol: READY",
-              "Alert latency: <3s",
-              "WebSocket: CONNECTED",
-              "Route calculation: <2s",
-              "Geo-fence radius: 200m",
-              "Real-time GPS tracking enabled",
-              "Green corridor protocol: READY",
-              "Alert latency: <3s",
-              "WebSocket: CONNECTED",
-              "Route calculation: <2s",
-              "Geo-fence radius: 200m",
-            ].map((t, i) => (
-              <span key={i}>▸ {t}</span>
-            ))}
-          </div>
-        </div>
-      </div>
 
-      {/* Navbar */}
-      <nav className="navbar">
-        <Link href="/" className="logo-wrap">
-          <div className="logo-icon">
-            <div className="logo-ring" />
-            <div className="logo-ring" />
-            <div className="logo-dot" />
-          </div>
-          <span className="logo-text">Golden<span>Hour</span></span>
-        </Link>
-        <ul className="nav-links">
-          {["Features", "Roles", "How It Works"].map((l) => (
-            <li key={l}><a href={`#${l.toLowerCase().replace(/ /g, "-")}`}>{l}</a></li>
-          ))}
-        </ul>
-        <div style={{ display: "flex", gap: "0.80rem", flexWrap: "wrap", justifyContent: "flex-end", alignItems: 'center' }}>
-          <button onClick={() => setIsModalOpen(true)} className="btn btn-ghost" style={{ borderColor: 'var(--danger)', color: 'var(--danger)', fontWeight: 700 }}>🚨 Emergency Request</button>
-          <div style={{ width: '1px', height: '20px', background: 'var(--border)', margin: '0 0.5rem' }} />
-          <Link href="/auth?role=hospital" className="btn btn-ghost">Hospitals</Link>
-          <Link href="/auth?role=ambulance" className="btn btn-ghost">Ambulance</Link>
-          <Link href="/organizer" className="btn btn-ghost">Organizer Login</Link>
-          <Link href="/auth?role=admin" className="btn btn-primary" style={{ fontSize: '0.85rem' }}>Admin Portal</Link>
-        </div>
-      </nav>
 
       {/* ── HERO ── */}
       <section className="hero bg-dots">
