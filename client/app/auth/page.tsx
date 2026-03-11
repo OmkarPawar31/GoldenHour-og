@@ -49,6 +49,8 @@ function AuthContent() {
             setSelectedRole(urlRole);
             if (urlRole === "admin") {
                 setMode("admin");
+            } else if (urlRole === "ambulance") {
+                setMode("login"); // Ambulance drivers are provisioned by hospitals only
             } else if (urlMode === "register") {
                 setMode("register");
             } else {
@@ -538,6 +540,8 @@ function AuthContent() {
                         <div className="mode-toggle">
                             {mode === "admin" ? (
                                 <button className="mode-btn active">Admin Access</button>
+                            ) : selectedRole === "ambulance" ? (
+                                <button className="mode-btn active">Driver Login Expected</button>
                             ) : (
                                 <>
                                     <button
@@ -707,7 +711,7 @@ function AuthContent() {
                         </form>
 
                         {/* Toggle */}
-                        {mode !== "admin" && (
+                        {mode !== "admin" && selectedRole !== "ambulance" && (
                             <div className="toggle-row">
                                 {mode === "login" ? "Don't have an account? " : "Already registered? "}
                                 <button
