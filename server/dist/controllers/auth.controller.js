@@ -18,7 +18,7 @@ async function register(req, res) {
         if (existingUser) {
             return res.status(409).json({ message: "Email already registered" });
         }
-        const allowedRoles = ["admin", "driver", "user", "hospital"];
+        const allowedRoles = ["admin", "driver", "user", "hospital", "organizer"];
         const userRole = allowedRoles.includes(role) ? role : "user";
         const user = await User_1.default.create({
             name,

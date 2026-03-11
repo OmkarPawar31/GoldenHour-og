@@ -2,6 +2,7 @@
 
 import { useState, useEffect, useRef, useCallback } from "react";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { io, Socket } from "socket.io-client";
 
 // --- Types ---
@@ -45,6 +46,14 @@ export default function HospitalCommandCenter() {
     const [isOpen, setIsOpen] = useState(true);
     const [mapReady, setMapReady] = useState(false);
     const [activeTab, setActiveTab] = useState<"fleet" | "requests" | "settings">("fleet");
+    const router = useRouter();
+
+    const handleLogout = () => {
+        localStorage.removeItem("gh_token");
+        localStorage.removeItem("gh_user");
+        localStorage.removeItem("gh_role");
+        router.push("/auth");
+    };
 
     // Mock Data
     const [fleet, setFleet] = useState<Ambulance[]>([
@@ -248,9 +257,12 @@ export default function HospitalCommandCenter() {
                 <aside className="nav-side">
                     <div className="nav-icon active" onClick={() => setActiveTab("fleet")}>🚚</div>
                     <div className="nav-icon" onClick={() => setActiveTab("requests")}>🚑</div>
-                    <div className="nav-icon" onClick={() => setShowSettings(true)}>⚙️</div>
-                    <div style={{ marginTop: 'auto' }}>
-                        <Link href="/" className="nav-icon">🚪</Link>
+                    <div className="nav-icon" onClick={() => setShowSettings(true)} title="Settings">⚙️</div>
+                    <div style={{ marginTop: 'auto', display: 'flex', flexDirection: 'column', gap: '1rem', alignItems: 'center' }}>
+                        <Link href="/" className="nav-icon" title="Home">🏠</Link>
+                        <div className="nav-icon logout-btn" title="Log Out" onClick={handleLogout} style={{ color: 'var(--danger)' }}>
+                            <svg width="20" height="20" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" viewBox="0 0 24 24"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"></path><polyline points="16 17 21 12 16 7"></polyline><line x1="21" y1="12" x2="9" y2="12"></line></svg>
+                        </div>
                     </div>
                 </aside>
 

@@ -593,6 +593,7 @@ export default function HomePage() {
           <div style={{ width: '1px', height: '20px', background: 'var(--border)', margin: '0 0.5rem' }} />
           <Link href="/auth?role=hospital" className="btn btn-ghost">Hospitals</Link>
           <Link href="/auth?role=ambulance" className="btn btn-ghost">Ambulance</Link>
+          <Link href="/organizer" className="btn btn-ghost">Organizer Login</Link>
           <Link href="/auth?role=admin" className="btn btn-primary" style={{ fontSize: '0.85rem' }}>Admin Portal</Link>
         </div>
       </nav>
