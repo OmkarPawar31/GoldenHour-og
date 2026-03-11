@@ -123,16 +123,25 @@ export default function AmbulancePage() {
   const hospitalsFetched = useRef(false);
   const lastRerouteTime = useRef<number>(0);
 
+  const selectedHospital = hospitals.find(h => h.id === selectedHospitalId) || null;
+
   // Auto-select nearest hospital when hospitals list changes
   useEffect(() => {
     if (hospitals.length === 0) return;
     setSelectedHospitalId((prev) => {
       const stillExists = hospitals.find((h) => h.id === prev);
-      return stillExists ? prev : hospitals[0].id;
+      const newId = stillExists ? prev : hospitals[0].id;
+      
+      // Keep main destination state in sync with auto-selection
+      const newHospitalData = hospitals.find(h => h.id === newId);
+      if (newHospitalData) {
+        setDestination({ lat: newHospitalData.location.lat, lng: newHospitalData.location.lng });
+        setDestinationName(newHospitalData.name);
+      }
+      
+      return newId;
     });
   }, [hospitals]);
-
-  const selectedHospital = hospitals.find(h => h.id === selectedHospitalId) || null;
 
   const handleMapLoad = useCallback((map: google.maps.Map) => {
     setMapInstance(map);
