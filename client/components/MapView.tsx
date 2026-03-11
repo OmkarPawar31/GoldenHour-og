@@ -120,6 +120,15 @@ export default function MapView({
   const mapRef = useRef<google.maps.Map | null>(null);
   const prevDestinationRef = useRef<{ lat: number; lng: number } | null>(null);
   const [isAnimatingDestination, setIsAnimatingDestination] = useState(false);
+  const [isIntroAnimating, setIsIntroAnimating] = useState(false);
+
+  const prevIsEmergencyRef = useRef(isEmergencyActive);
+  const latestAmbulancePos = useRef(ambulancePosition);
+
+  // Keep track of the latest ambulance position for the intro animation starting point
+  useEffect(() => {
+    latestAmbulancePos.current = ambulancePosition;
+  }, [ambulancePosition]);
 
   const onLoad = (map: google.maps.Map) => {
     mapRef.current = map;
@@ -132,9 +141,9 @@ export default function MapView({
     mapRef.current = null;
   };
 
-  // fitBounds on route load to show full route
+  // fitBounds on route load to show full route (only if not active)
   useEffect(() => {
-    if (mapRef.current) {
+    if (mapRef.current && !isEmergencyActive && !isIntroAnimating) {
       if (directions) {
         const route = directions.routes[0];
         if (route && route.bounds) {
@@ -148,13 +157,12 @@ export default function MapView({
         mapRef.current.fitBounds(bounds, { top: 80, left: 40, right: 40, bottom: 160 });
       }
     }
-  }, [directions, routeInfo]);
+  }, [directions, routeInfo, isEmergencyActive, isIntroAnimating]);
 
-  // Pan to destination when it changes
+  // Pan to destination when hospital changes (non-emergency preview)
   useEffect(() => {
     if (!mapRef.current || !destination) return;
 
-    // Check if destination actually changed
     if (
       prevDestinationRef.current &&
       prevDestinationRef.current.lat === destination.lat &&
@@ -165,30 +173,96 @@ export default function MapView({
 
     prevDestinationRef.current = destination;
 
-    // Trigger smooth pan and zoom animation
-    setIsAnimatingDestination(true);
-    mapRef.current.panTo(destination);
+    if (!isEmergencyActive && !isIntroAnimating) {
+      // Trigger smooth pan and zoom animation for preview
+      setIsAnimatingDestination(true);
+      mapRef.current.panTo(destination);
 
-    setTimeout(() => {
-      if (mapRef.current) {
-        mapRef.current.setZoom(17);
+      setTimeout(() => {
+        if (mapRef.current) {
+          mapRef.current.setZoom(17);
+        }
+      }, 300);
+
+      const timer = setTimeout(() => {
+        setIsAnimatingDestination(false);
+      }, 1500);
+
+      return () => clearTimeout(timer);
+    }
+  }, [destination, isEmergencyActive, isIntroAnimating]);
+
+  // Slow Cinematic Animation to Hospital when Emergency Starts
+  useEffect(() => {
+    if (isEmergencyActive && !prevIsEmergencyRef.current && mapRef.current && destination) {
+      // Start Intro Sequence
+      setIsIntroAnimating(true);
+      setIsAnimatingDestination(true);
+
+      const ambPos = latestAmbulancePos.current || origin || defaultCenter;
+      const startLat = typeof ambPos.lat === 'function' ? (ambPos as any).lat() : ambPos.lat;
+      const startLng = typeof ambPos.lng === 'function' ? (ambPos as any).lng() : ambPos.lng;
+      const endLat = typeof destination.lat === 'function' ? (destination as any).lat() : destination.lat;
+      const endLng = typeof destination.lng === 'function' ? (destination as any).lng() : destination.lng;
+
+      const duration = 3500; // 3.5s cinematic pan
+      const startTime = performance.now();
+
+      const animatePan = (currentTime: number) => {
+        const elapsed = currentTime - startTime;
+        const progress = Math.min(elapsed / duration, 1);
+        
+        // Custom easing (smooth step)
+        const ease = progress * progress * (3 - 2 * progress);
+        
+        const currentLat = startLat + (endLat - startLat) * ease;
+        const currentLng = startLng + (endLng - startLng) * ease;
+        
+        mapRef.current?.setCenter({ lat: currentLat, lng: currentLng });
+        
+        if (progress < 1) {
+          requestAnimationFrame(animatePan);
+        } else {
+          // Reached hospital; zoom in slightly and hold focus
+          if (mapRef.current) {
+            mapRef.current.setZoom(18);
+          }
+          setTimeout(() => {
+            setIsIntroAnimating(false);
+            setIsAnimatingDestination(false);
+          }, 2000); // Wait 2s at hospital before snapping back to driver
+        }
+      };
+      
+      requestAnimationFrame(animatePan);
+    }
+    prevIsEmergencyRef.current = isEmergencyActive;
+  }, [isEmergencyActive, destination, origin]);
+
+  // Follow ambulance when active and intro is done
+  useEffect(() => {
+    if (mapRef.current && ambulancePosition && isEmergencyActive && !isIntroAnimating) {
+      mapRef.current.panTo(ambulancePosition);
+      // Dynamically zoom based on speed if we want, or keep fixed
+      if (mapRef.current.getZoom()! < 18) {
+         mapRef.current.setZoom(18);
       }
-    }, 300);
+    }
+  }, [ambulancePosition, isEmergencyActive, isIntroAnimating]);
 
-    const timer = setTimeout(() => {
-      setIsAnimatingDestination(false);
-    }, 1500);
-
-    return () => clearTimeout(timer);
-  }, [destination]);
-
-  const center = ambulancePosition || origin || destination || defaultCenter;
+  // Compute map center prop: only control it natively if we aren't handling it manually
+  const [computedCenter, setComputedCenter] = useState(ambulancePosition || origin || destination || defaultCenter);
+  useEffect(() => {
+    if (!isEmergencyActive && !isIntroAnimating) {
+      setComputedCenter(ambulancePosition || origin || destination || defaultCenter);
+    }
+  }, [ambulancePosition, origin, destination, isEmergencyActive, isIntroAnimating]);
 
   return (
     <div className="w-full h-full rounded-xl overflow-hidden border border-gray-800 shadow-2xl relative">
       <GoogleMap
         mapContainerStyle={mapContainerStyle}
-        center={center}
+        center={computedCenter}
         zoom={15}
         options={mapOptions}
         onLoad={onLoad}
