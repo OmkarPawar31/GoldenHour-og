@@ -8,56 +8,73 @@ export function useDirectionsRoute() {
     const [loading, setLoading] = useState(false);
     const [error, setError] = useState<string | null>(null);
 
-    const fetchRoute = useCallback((origin: Location, destination: Location) => {
+    const fetchRoute = useCallback(async (origin: Location, destination: Location) => {
         setLoading(true);
         setError(null);
-        const directionsService = new window.google.maps.DirectionsService();
+        
+        if (!origin || !destination || typeof origin.lat !== 'number' || typeof destination.lat !== 'number') {
+            console.error("Invalid origin or destination", { origin, destination });
+            setError("Invalid origin or destination coordinates");
+            setLoading(false);
+            return;
+        }
 
-        // FIX 1: Use DirectionsService with driving options for road-snapped routes
-        directionsService.route(
-            {
-                origin: new window.google.maps.LatLng(origin.lat, origin.lng),
-                destination: new window.google.maps.LatLng(destination.lat, destination.lng),
-                travelMode: window.google.maps.TravelMode.DRIVING,
-                drivingOptions: {
-                    departureTime: new Date(),
-                    trafficModel: window.google.maps.TrafficModel.BEST_GUESS,
-                },
-                provideRouteAlternatives: false,
-            },
-            (result, status) => {
-                if (status === window.google.maps.DirectionsStatus.OK && result) {
-                    setDirections(result);
-                    const leg = result.routes[0].legs[0];
-
-                    // FIX 5: Extract high-resolution points from ALL steps, not just overview_path
-                    const routePoints: Location[] = [];
-                    result.routes[0].legs.forEach((routeLeg) => {
-                        routeLeg.steps.forEach((step) => {
-                            step.path.forEach((p) => {
-                                routePoints.push({
-                                    lat: p.lat(),
-                                    lng: p.lng(),
-                                });
-                            });
-                        });
-                    });
-
-                    setRouteInfo({
-                        distanceText: leg.distance?.text || "",
-                        durationText: leg.duration?.text || "",
-                        distanceValue: leg.distance?.value || 0,
-                        durationValue: leg.duration?.value || 0,
-                        routePoints,
-                    });
-                } else {
-                    setError(`Route error: ${status}`);
-                    setDirections(null);
-                    setRouteInfo(null);
-                }
-                setLoading(false);
+        try {
+            // Bypass Google Cloud Directions API completely to avoid billing REQUEST_DENIED
+            // using OSRM open source routing API
+            const response = await fetch(
+                `https://router.project-osrm.org/route/v1/driving/${origin.lng},${origin.lat};${destination.lng},${destination.lat}?overview=full&geometries=geojson`
+            );
+            
+            if (!response.ok) {
+                throw new Error(`OSRM API error: ${response.status}`);
             }
-        );
+
+            const data = await response.json();
+            
+            if (data.code !== 'Ok' || !data.routes || data.routes.length === 0) {
+                throw new Error("No route found from OSRM");
+            }
+
+            const route = data.routes[0];
+            const coordinates: [number, number][] = route.geometry.coordinates;
+            
+            const routePoints: Location[] = coordinates.map(coord => ({
+                lng: coord[0],
+                lat: coord[1]
+            }));
+
+            // Calculate duration in minutes/hours
+            const durationSecs = route.duration;
+            const durationMins = Math.max(1, Math.round(durationSecs / 60));
+            const durationText = durationMins >= 60 
+                ? `${Math.floor(durationMins / 60)}h ${durationMins % 60}m` 
+                : `${durationMins} mins`;
+
+            // Calculate distance in km
+            const distanceMeters = route.distance;
+            const distanceKm = (distanceMeters / 1000).toFixed(1);
+            const distanceText = `${distanceKm} km`;
+
+            // Clear directions since we're injecting custom polylines via routePoints
+            setDirections(null); 
+            
+            setRouteInfo({
+                distanceText,
+                durationText,
+                distanceValue: distanceMeters,
+                durationValue: durationSecs,
+                routePoints,
+            });
+            
+        } catch (err: any) {
+            console.error("OSRM Routing error:", err);
+            setError(`Route error: ${err.message}`);
+            setDirections(null);
+            setRouteInfo(null);
+        } finally {
+            setLoading(false);
+        }
     }, []);
 
     return { directions, routeInfo, fetchRoute, loading, error };

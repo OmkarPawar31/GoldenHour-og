@@ -1,6 +1,21 @@
 // components/MapView.tsx
 "use client";
 
+import { useEffect, useRef } from "react";
+import { useJsApiLoader, GoogleMap, DirectionsRenderer, Marker, Polyline } from "@react-google-maps/api";
+import { Location, Hospital, RouteInfo } from "../types";
+
+const LIBRARIES: ("geometry" | "places")[] = ["geometry", "places"];
+
+const MAP_STYLES = [
+  { elementType: "geometry", stylers: [{ color: "#0f172a" }] },
+  { elementType: "labels.text.fill", stylers: [{ color: "#94a3b8" }] },
+  { elementType: "labels.text.stroke", stylers: [{ color: "#0f172a" }] },
+  { featureType: "road", elementType: "geometry", stylers: [{ color: "#1e293b" }] },
+  { featureType: "road.highway", elementType: "geometry", stylers: [{ color: "#334155" }] },
+  { featureType: "water", elementType: "geometry", stylers: [{ color: "#020617" }] },
+  { featureType: "poi", stylers: [{ visibility: "off" }] },
+];
 import { useEffect, useRef, useState } from "react";
 import { GoogleMap, Marker, Polyline, OverlayView } from "@react-google-maps/api";
 
@@ -30,6 +45,16 @@ const mapContainerStyle = {
   height: "100%",
 };
 
+interface MapViewProps {
+  origin: Location;
+  hospitals: Hospital[];
+  selectedHospitalId: string | null;
+  directions: google.maps.DirectionsResult | null;
+  routeInfo: RouteInfo | null;
+  isDemoMode: boolean;
+  onMapLoad: (map: google.maps.Map) => void;
+  onHospitalSelect: (hospital: Hospital) => void;
+  ambulancePosition?: Location;
 // Fallback center if everything else fails (Panvel)
 const defaultCenter = { lat: 18.9894, lng: 73.1175 };
 
@@ -95,6 +120,8 @@ export default function MapView({
   remainingDistanceM,
   directions,
   onMapLoad,
+  onHospitalSelect,
+  ambulancePosition
 }: MapViewProps) {
   const mapRef = useRef<google.maps.Map | null>(null);
   const prevDestinationRef = useRef<{ lat: number; lng: number } | null>(null);
@@ -113,13 +140,21 @@ export default function MapView({
 
   // fitBounds on route load to show full route
   useEffect(() => {
-    if (mapRef.current && directions) {
-      const route = directions.routes[0];
-      if (route && route.bounds) {
-        mapRef.current.fitBounds(route.bounds, { top: 80, left: 40, right: 40, bottom: 160 });
-      }
+    if (mapRef.current) {
+        if (directions) {
+          const route = directions.routes[0];
+          if (route && route.bounds) {
+            mapRef.current.fitBounds(route.bounds, { top: 80, left: 40, right: 40, bottom: 160 });
+          }
+        } else if (routeInfo && routeInfo.routePoints.length > 0) {
+            const bounds = new window.google.maps.LatLngBounds();
+            routeInfo.routePoints.forEach(p => {
+                bounds.extend(new window.google.maps.LatLng(p.lat, p.lng));
+            });
+            mapRef.current.fitBounds(bounds, { top: 80, left: 40, right: 40, bottom: 160 });
+        }
     }
-  }, [directions]);
+  }, [directions, routeInfo]);
 
   // Pan to destination when it changes
   useEffect(() => {
@@ -169,6 +204,34 @@ export default function MapView({
         onLoad={onLoad}
         onUnmount={onUnmount}
       >
+        {origin && !ambulancePosition && (
+          <Marker
+            position={origin}
+            icon={ambulanceIcon}
+            zIndex={200}
+          />
+        )}
+        
+        {ambulancePosition && (
+          <Marker
+            position={ambulancePosition}
+            icon={ambulanceIcon}
+            zIndex={200}
+          />
+        )}
+
+        {hospitals.map(h => (
+          <Marker
+            key={h.id}
+            position={h.location}
+            onClick={() => onHospitalSelect(h)}
+            icon={h.id === selectedHospitalId ? hospitalSelectedIcon : hospitalDefaultIcon}
+            zIndex={h.id === selectedHospitalId ? 100 : 1}
+          />
+        ))}
+
+        {/* FIX 2: White border polyline behind route for outline effect */}
+        {routeInfo && routeInfo.routePoints.length > 0 && (
         {/* Render Route Polyline */}
         {isEmergencyActive && routePoints.length > 0 && (
           <Polyline
@@ -182,6 +245,34 @@ export default function MapView({
           />
         )}
 
+        {/* Custom blue style polyline because we bypassed DirectionsRenderer */}
+        {routeInfo && routeInfo.routePoints.length > 0 && !directions && (
+          <Polyline
+            path={routeInfo.routePoints}
+            options={{
+              strokeColor: "#4285F4",
+              strokeWeight: 6,
+              strokeOpacity: 1.0,
+              zIndex: 10,
+            }}
+          />
+        )}
+
+        {/* Fallback to DirectionsRenderer if directions exist */}
+        {directions && (
+          <DirectionsRenderer
+            directions={directions}
+            options={{
+              suppressMarkers: true,
+              suppressInfoWindows: true,
+              polylineOptions: {
+                strokeColor: "#4285F4",
+                strokeWeight: 6,
+                strokeOpacity: 1.0,
+                zIndex: 10,
+              },
+            }}
+          />
         {/* Render Traffic Signals */}
         {trafficSignals.map((signal) => {
           let color = "#ff4444";
