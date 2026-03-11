@@ -193,8 +193,13 @@ export default function HospitalSearch({ onHospitalSelect, isLoaded, currentLoca
         if (placeResult?.geometry?.location) {
           const lat = placeResult.geometry.location.lat();
           const lng = placeResult.geometry.location.lng();
+<<<<<<< HEAD
           const name = placeResult.name || prediction.name || "Hospital";
           const address = placeResult.formatted_address || prediction.address;
+=======
+          const name = placeResult.name || prediction.main_text || "Unknown Hospital";
+          const address = placeResult.formatted_address || prediction.description || "Unknown Address";
+>>>>>>> feat/greencorridor
 
           onHospitalSelect({ lat, lng, name, address });
           setSearchInput("");
