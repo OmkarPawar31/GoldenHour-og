@@ -161,22 +161,26 @@ export default function AmbulancePage() {
       }
     }
   });
-  const handleHospitalSelect = (hospital: { lat: number; lng: number; name: string; address: string } | Hospital) => {
+  const handleHospitalSelect = (hospital: { lat: number; lng: number; name: string; address: string; id?: string } | Hospital) => {
     // Adapter to work with both types
-    const h = 'id' in hospital 
-      ? { lat: hospital.location.lat, lng: hospital.location.lng, name: hospital.name, address: (hospital as any).vicinity || "" }
+    const h = 'location' in hospital 
+      ? { lat: hospital.location.lat, lng: hospital.location.lng, name: hospital.name, address: (hospital as any).vicinity || "", id: hospital.id }
       : hospital;
 
-    setDestination({ lat: h.lat, lng: h.lng });
+    const loc = { lat: h.lat, lng: h.lng };
+    setDestination(loc);
     setDestinationName(h.name);
     showToast(`🏥 Destination changed to ${h.name}`, "success");
     
     // Also sync the selected id if it came from a card
-    if ('id' in hospital) {
-      setSelectedHospitalId(hospital.id);
-      if (origin && mapInstance && !directions) {
-        fetchRoute(origin, hospital.location);
-      }
+    if (h.id) {
+      setSelectedHospitalId(h.id);
+    } else {
+      setSelectedHospitalId(null);
+    }
+
+    if (origin) {
+      fetchRoute(origin, loc);
     }
   };
 
@@ -184,8 +188,6 @@ export default function AmbulancePage() {
     try {
       showToast("Activating Green Corridor System...", "info");
 
-      // Removed backend trigger function that was deleted in other branch
-      
       // Always generate a DirectionsResult client-side for road-following display
       showToast("Generating optimal dispatch route...", "info");
       const routeData = await generateRoute(realGpsLocation, destination);
@@ -201,14 +203,15 @@ export default function AmbulancePage() {
     }
   };
 
-  // FIX 2: Route useEffect — only for auto-route on first hospital load
+  // Route useEffect — only for auto-route on first hospital load when list populates
   useEffect(() => {
-    if (!origin || !selectedHospital || !mapInstance) return;
-    // Only auto-route if no route exists yet (first load)
-    if (!directions) {
+    if (!origin || !selectedHospital || hospitalsFetched.current === false) return;
+    
+    // Auto route if it's the first time
+    if (!routeInfo && !isEmergencyActive) {
       fetchRoute(origin, selectedHospital.location);
     }
-  }, [selectedHospital, mapInstance, origin, directions, fetchRoute]);
+  }, [selectedHospital, origin, routeInfo, isEmergencyActive, fetchRoute]);
 
   // BUG 4: Live rerouting with cooldown to prevent infinite loop
   useEffect(() => {
