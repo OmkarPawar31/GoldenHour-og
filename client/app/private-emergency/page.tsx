@@ -95,11 +95,34 @@ export default function PrivateEmergencyDashboard() {
   const [mapReady, setMapReady] = useState(false);
 
   /* private-specific */
-  const [plateNumber, setPlateNumber] = useState("");
+  const [plateNumber, setPlateNumber]       = useState("");
   const [plateSubmitted, setPlateSubmitted] = useState(false);
+  const [patientName, setPatientName]       = useState("");
+  const [patientPhone, setPatientPhone]     = useState("");
+  const [severity, setSeverity]             = useState("");
   const [nearbyAmbulances, setNearbyAmbulances] = useState<NearbyAmbulance[]>([]);
-  const [adminApproved, setAdminApproved] = useState(false);
+  const [adminApproved, setAdminApproved]       = useState(false);
   const [backendSessionId, setBackendSessionId] = useState<string | null>(null);
+
+  /* ── Auto-load from Emergency modal (sessionStorage) ── */
+  useEffect(() => {
+    const name  = sessionStorage.getItem("em_name")     || "";
+    const phone = sessionStorage.getItem("em_phone")    || "";
+    const plate = sessionStorage.getItem("em_plate")    || "";
+    const sev   = sessionStorage.getItem("em_severity") || "";
+    if (name || plate) {
+      setPatientName(name);
+      setPatientPhone(phone);
+      setPlateNumber(plate);
+      setSeverity(sev);
+      setPlateSubmitted(true);
+      /* clear so page refresh doesn't re-submit */
+      ["em_name","em_phone","em_plate","em_severity","em_destination"].forEach(k => sessionStorage.removeItem(k));
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+
 
   /* ── refs ── */
   const mapRef = useRef<HTMLDivElement>(null);

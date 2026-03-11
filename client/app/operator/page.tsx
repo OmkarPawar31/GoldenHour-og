@@ -8,7 +8,7 @@ import { useRouter } from "next/navigation";
 const MAPS_API_KEY = process.env.NEXT_PUBLIC_GOOGLE_MAPS_API_KEY || "";
 const DEFAULT_CENTER = { lat: 18.5204, lng: 73.8567 };
 
-export default function OrganizerDashboard() {
+export default function OperatorDashboard() {
     const router = useRouter();
     const [isLoggedIn, setIsLoggedIn] = useState(false);
     const [loginName, setLoginName] = useState("");
@@ -99,7 +99,7 @@ export default function OrganizerDashboard() {
                 localStorage.setItem("gh_role", data.user.role);
                 setIsLoggedIn(true);
             } else if (res.ok) {
-                setLoginError("Account does not have organizer privileges.");
+                setLoginError("Account does not have operator privileges.");
             } else {
                 setLoginError(data.message || "Invalid username or password.");
             }
@@ -250,7 +250,7 @@ export default function OrganizerDashboard() {
             <div style={{ height: '100vh', display: 'flex', alignItems: 'center', justifyContent: 'center', backgroundColor: '#FFFBF5', fontFamily: "'DM Sans', sans-serif" }}>
                 <div style={{ background: '#fff', padding: '3rem', borderRadius: '16px', boxShadow: '0 10px 40px rgba(0,0,0,0.06)', maxWidth: '400px', width: '100%' }}>
                     <div style={{ textAlign: 'center', marginBottom: '2rem' }}>
-                        <h1 style={{ fontFamily: "'Bebas Neue', cursive", fontSize: '3rem', color: '#1E293B' }}>Organizer <span style={{ color: '#E8571A' }}>Login</span></h1>
+                        <h1 style={{ fontFamily: "'Bebas Neue', cursive", fontSize: '3rem', color: '#1E293B' }}>Operator <span style={{ color: '#E8571A' }}>Login</span></h1>
                         <p style={{ color: '#64748B', fontSize: '0.9rem' }}>Access the event & location control panel.</p>
                     </div>
                     <form onSubmit={handleLogin} style={{ display: 'flex', flexDirection: 'column', gap: '1.5rem' }}>

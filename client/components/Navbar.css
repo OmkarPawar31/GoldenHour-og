@@ -93,7 +93,7 @@
   line-height: 1;
 }
 
-/* ── Auth buttons (logged out) ── */
+/* ── Auth buttons (logged out, simple 2-button layout) ── */
 .gh-nav-auth {
   display: flex;
   align-items: center;
@@ -135,6 +135,82 @@
   transform: translateY(-1px);
   box-shadow: 0 4px 20px rgba(232, 87, 26, 0.4);
 }
+
+/* ── Portal buttons (4 role login buttons, shown when logged out) ── */
+.gh-nav-portals {
+  display: flex;
+  align-items: center;
+  gap: 0.45rem;
+}
+
+.gh-nav-portal-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+  padding: 0.42rem 0.9rem;
+  border-radius: 8px;
+  font-size: 0.8rem;
+  font-weight: 600;
+  color: #475569;
+  text-decoration: none;
+  background: #fff;
+  border: 1.5px solid #E2E8F0;
+  white-space: nowrap;
+  cursor: pointer;
+  font-family: 'DM Sans', system-ui, sans-serif;
+  transition: all 0.22s cubic-bezier(0.34, 1.56, 0.64, 1);
+  position: relative;
+  overflow: hidden;
+}
+
+.gh-nav-portal-btn::before {
+  content: '';
+  position: absolute;
+  left: 0; top: 0; bottom: 0;
+  width: 3px;
+  background: var(--portal-clr, #E8571A);
+  transform: scaleY(0);
+  transform-origin: bottom;
+  transition: transform 0.22s ease;
+  border-radius: 0 2px 2px 0;
+}
+
+.gh-nav-portal-btn:hover {
+  color: var(--portal-clr, #E8571A);
+  border-color: var(--portal-clr, #E8571A);
+  background: color-mix(in srgb, var(--portal-clr, #E8571A) 6%, #fff);
+  transform: translateY(-2px);
+  box-shadow: 0 4px 14px color-mix(in srgb, var(--portal-clr, #E8571A) 25%, transparent);
+}
+
+.gh-nav-portal-btn:hover::before {
+  transform: scaleY(1);
+}
+
+/* Emergency button — always stands out with a subtle pulse */
+.gh-nav-portal-btn--emergency {
+  background: linear-gradient(135deg, rgba(245,158,11,0.07), rgba(239,68,68,0.07));
+  border-color: rgba(239,68,68,0.28);
+  color: #DC2626;
+  font-weight: 700;
+  animation: gh-em-breathe 2.5s ease-in-out infinite;
+}
+
+@keyframes gh-em-breathe {
+  0%, 100% { box-shadow: 0 0 0 0 rgba(239,68,68,0.18); }
+  50%       { box-shadow: 0 0 0 5px rgba(239,68,68,0.06); }
+}
+
+.gh-nav-portal-btn--emergency:hover {
+  background: linear-gradient(135deg, rgba(245,158,11,0.14), rgba(239,68,68,0.14));
+  border-color: #EF4444;
+  color: #DC2626;
+  transform: translateY(-2px);
+  box-shadow: 0 4px 16px rgba(239,68,68,0.28);
+  animation: none;
+}
+
+
 
 /* ── Logout button ── */
 .gh-nav-logout {
@@ -306,6 +382,7 @@
 @media (max-width: 768px) {
   .gh-nav-links,
   .gh-nav-auth,
+  .gh-nav-portals,
   .gh-nav-divider,
   .gh-nav-role-badge,
   .gh-nav-logout {
@@ -318,6 +395,4 @@
 }
 
 /* ── Body offset (applied to pages using the shared nav) ── */
-.gh-has-navbar {
-  /* Navbar is sticky so no padding needed, but children can reference this */
-}
+/* Navbar is sticky so no extra padding needed */
