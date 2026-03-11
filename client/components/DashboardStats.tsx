@@ -55,44 +55,48 @@ export default function DashboardStats({
 
   return (
     <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 w-full">
-      {/* Card 1 */}
-      <div className="bg-[#0a0e1a]/90 backdrop-blur-sm rounded-xl border border-gray-800 p-5 flex items-center justify-between shadow-lg relative overflow-hidden">
-        <div className="absolute top-0 right-0 w-24 h-24 bg-red-500/5 rounded-full blur-2xl -translate-y-1/2 translate-x-1/2 pointer-events-none" />
+      {/* Card 1 — Active Emergencies */}
+      <div className="bg-[#0a0e1a]/90 backdrop-blur-sm rounded-xl border border-gray-800 p-5 flex items-center justify-between shadow-lg relative overflow-hidden group hover:scale-[1.02] hover:border-red-500/30 transition-all duration-300">
+        <div className="absolute top-0 left-0 right-0 h-[2px] bg-gradient-to-r from-red-500 via-red-400 to-orange-500" />
+        <div className="absolute top-0 right-0 w-24 h-24 bg-red-500/5 rounded-full blur-2xl -translate-y-1/2 translate-x-1/2 pointer-events-none group-hover:bg-red-500/10 transition-colors duration-500" />
         <div className="flex flex-col relative z-10">
           <span className="text-gray-500 font-mono text-[10px] uppercase tracking-widest mb-1.5">Active Emergencies</span>
           <span className="text-3xl font-bold font-mono text-white">{aeAnim}</span>
         </div>
-        <div className="w-10 h-10 rounded-full bg-red-500/10 border border-red-500/20 flex items-center justify-center relative z-10">
+        <div className="w-11 h-11 rounded-full bg-gradient-to-br from-red-500/20 to-red-600/10 border border-red-500/30 flex items-center justify-center relative z-10 shadow-[0_0_15px_rgba(239,68,68,0.15)]">
           <span className="text-red-400">🚨</span>
         </div>
       </div>
 
-      {/* Card 2 */}
-      <div className="bg-[#0a0e1a]/90 backdrop-blur-sm rounded-xl border border-gray-800 p-5 flex items-center justify-between shadow-lg relative overflow-hidden">
-        <div className="absolute top-0 right-0 w-24 h-24 bg-blue-500/5 rounded-full blur-2xl -translate-y-1/2 translate-x-1/2 pointer-events-none" />
+      {/* Card 2 — Available Units */}
+      <div className="bg-[#0a0e1a]/90 backdrop-blur-sm rounded-xl border border-gray-800 p-5 flex items-center justify-between shadow-lg relative overflow-hidden group hover:scale-[1.02] hover:border-blue-500/30 transition-all duration-300">
+        <div className="absolute top-0 left-0 right-0 h-[2px] bg-gradient-to-r from-blue-500 via-blue-400 to-cyan-400" />
+        <div className="absolute top-0 right-0 w-24 h-24 bg-blue-500/5 rounded-full blur-2xl -translate-y-1/2 translate-x-1/2 pointer-events-none group-hover:bg-blue-500/10 transition-colors duration-500" />
         <div className="flex flex-col relative z-10">
           <span className="text-gray-500 font-mono text-[10px] uppercase tracking-widest mb-1.5">Available Units</span>
           <span className="text-3xl font-bold font-mono text-white">{aaAnim}</span>
         </div>
-        <div className="w-10 h-10 rounded-full bg-blue-500/10 border border-blue-500/20 flex items-center justify-center relative z-10">
+        <div className="w-11 h-11 rounded-full bg-gradient-to-br from-blue-500/20 to-blue-600/10 border border-blue-500/30 flex items-center justify-center relative z-10 shadow-[0_0_15px_rgba(59,130,246,0.15)]">
           <span className="text-blue-400">🚑</span>
         </div>
       </div>
 
-      {/* Card 3 */}
-      <div className="bg-[#0a0e1a]/90 backdrop-blur-sm rounded-xl border border-gray-800 p-5 flex items-center justify-between shadow-lg relative overflow-hidden">
-        <div className="absolute top-0 right-0 w-24 h-24 bg-purple-500/5 rounded-full blur-2xl -translate-y-1/2 translate-x-1/2 pointer-events-none" />
+      {/* Card 3 — Resolved Today */}
+      <div className="bg-[#0a0e1a]/90 backdrop-blur-sm rounded-xl border border-gray-800 p-5 flex items-center justify-between shadow-lg relative overflow-hidden group hover:scale-[1.02] hover:border-purple-500/30 transition-all duration-300">
+        <div className="absolute top-0 left-0 right-0 h-[2px] bg-gradient-to-r from-purple-500 via-purple-400 to-fuchsia-400" />
+        <div className="absolute top-0 right-0 w-24 h-24 bg-purple-500/5 rounded-full blur-2xl -translate-y-1/2 translate-x-1/2 pointer-events-none group-hover:bg-purple-500/10 transition-colors duration-500" />
         <div className="flex flex-col relative z-10">
           <span className="text-gray-500 font-mono text-[10px] uppercase tracking-widest mb-1.5">Resolved Today</span>
           <span className="text-3xl font-bold font-mono text-white">{rtAnim}</span>
         </div>
-        <div className="w-10 h-10 rounded-full bg-purple-500/10 border border-purple-500/20 flex items-center justify-center relative z-10">
+        <div className="w-11 h-11 rounded-full bg-gradient-to-br from-purple-500/20 to-purple-600/10 border border-purple-500/30 flex items-center justify-center relative z-10 shadow-[0_0_15px_rgba(168,85,247,0.15)]">
           <span className="text-purple-400">🏥</span>
         </div>
       </div>
 
-      {/* Card 4 - Highlighted */}
-      <div className="bg-[#0a0e1a]/90 backdrop-blur-sm rounded-xl border border-[#00ff88]/30 p-5 flex items-center justify-between shadow-[0_0_20px_rgba(0,255,136,0.1)] relative overflow-hidden group">
+      {/* Card 4 — Green Signals (Highlighted) */}
+      <div className="bg-[#0a0e1a]/90 backdrop-blur-sm rounded-xl border border-[#00ff88]/30 p-5 flex items-center justify-between shadow-[0_0_25px_rgba(0,255,136,0.1)] relative overflow-hidden group hover:scale-[1.02] hover:shadow-[0_0_35px_rgba(0,255,136,0.15)] transition-all duration-300">
+        <div className="absolute top-0 left-0 right-0 h-[2px] bg-gradient-to-r from-[#00ff88] via-emerald-400 to-teal-400" />
         <div className="absolute inset-0 bg-gradient-to-br from-[#00ff88]/5 to-transparent pointer-events-none" />
         <div className="absolute top-0 right-0 w-32 h-32 bg-[#00ff88]/10 rounded-full blur-3xl -translate-y-1/2 translate-x-1/2 pointer-events-none group-hover:bg-[#00ff88]/20 transition-colors duration-500" />
 
@@ -100,7 +104,7 @@ export default function DashboardStats({
           <span className="text-[#00ff88]/80 font-mono text-[10px] uppercase tracking-widest mb-1.5">Green Signals</span>
           <span className="text-3xl font-bold font-mono text-[#00ff88]">{gsAnim}</span>
         </div>
-        <div className="w-10 h-10 rounded-full bg-[#00ff88]/20 border border-[#00ff88]/40 flex items-center justify-center relative z-10 animate-pulse">
+        <div className="w-11 h-11 rounded-full bg-gradient-to-br from-[#00ff88]/25 to-emerald-500/10 border border-[#00ff88]/40 flex items-center justify-center relative z-10 animate-pulse shadow-[0_0_20px_rgba(0,255,136,0.2)]">
           <span className="text-[#00ff88] shrink-0 text-xl leading-none">🟢</span>
         </div>
       </div>

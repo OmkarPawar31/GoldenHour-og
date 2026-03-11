@@ -2,7 +2,7 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
-import { GoogleMap, Marker, Polyline, OverlayView, useJsApiLoader } from "@react-google-maps/api";
+import { GoogleMap, Marker, Polyline, OverlayView } from "@react-google-maps/api";
 
 export interface TrafficSignal {
   id: string;
@@ -19,6 +19,10 @@ interface MapViewProps {
   isEmergencyActive: boolean;
   bearing?: number;
   destinationName?: string;
+  etaMinutes?: number;
+  remainingDistanceM?: number;
+  directions?: google.maps.DirectionsResult | null;
+  onMapLoad?: (map: google.maps.Map) => void;
 }
 
 const mapContainerStyle = {
@@ -65,6 +69,20 @@ const mapOptions: google.maps.MapOptions = {
   ]
 };
 
+/* ── Helper formatters for the floating info panel ── */
+function formatTime(minutes: number): string {
+  if (minutes < 1) return "< 1 min";
+  if (minutes < 60) return `${Math.round(minutes)} min`;
+  const h = Math.floor(minutes / 60);
+  const m = Math.round(minutes % 60);
+  return m > 0 ? `${h}h ${m}min` : `${h}h`;
+}
+
+function formatDist(meters: number): string {
+  if (meters >= 1000) return `${(meters / 1000).toFixed(1)} km`;
+  return `${Math.round(meters)} m`;
+}
+
 export default function MapView({
   ambulancePosition,
   destination,
@@ -73,25 +91,37 @@ export default function MapView({
   isEmergencyActive,
   bearing = 0,
   destinationName,
+  etaMinutes,
+  remainingDistanceM,
+  directions,
+  onMapLoad,
 }: MapViewProps) {
-  const { isLoaded } = useJsApiLoader({
-    id: "google-map-script",
-    googleMapsApiKey: process.env.NEXT_PUBLIC_GOOGLE_MAPS_API_KEY || "",
-    libraries: ["geometry", "places"],
-  });
-
   const mapRef = useRef<google.maps.Map | null>(null);
-  const [isAnimatingDestination, setIsAnimatingDestination] = useState(false);
   const prevDestinationRef = useRef<{ lat: number; lng: number } | null>(null);
+  const [isAnimatingDestination, setIsAnimatingDestination] = useState(false);
 
-  // Smooth animation when ambulance position changes
-  useEffect(() => {
-    if (mapRef.current && ambulancePosition) {
-      mapRef.current.panTo(ambulancePosition);
+  const onLoad = (map: google.maps.Map) => {
+    mapRef.current = map;
+    if (onMapLoad) {
+      onMapLoad(map);
     }
-  }, [ambulancePosition]);
+  };
 
-  // Smooth animation when destination changes
+  const onUnmount = () => {
+    mapRef.current = null;
+  };
+
+  // fitBounds on route load to show full route
+  useEffect(() => {
+    if (mapRef.current && directions) {
+      const route = directions.routes[0];
+      if (route && route.bounds) {
+        mapRef.current.fitBounds(route.bounds, { top: 80, left: 40, right: 40, bottom: 160 });
+      }
+    }
+  }, [directions]);
+
+  // Pan to destination when it changes
   useEffect(() => {
     if (!mapRef.current || !destination) return;
 
@@ -127,17 +157,6 @@ export default function MapView({
     return () => clearTimeout(timer);
   }, [destination]);
 
-  if (!isLoaded) {
-    return (
-      <div className="w-full h-[60vh] bg-[#0a0e1a] border border-gray-800 rounded-xl relative overflow-hidden flex items-center justify-center">
-        <div className="flex flex-col items-center gap-4">
-          <div className="w-10 h-10 border-4 border-[#2979FF]/30 border-t-[#2979FF] rounded-full animate-spin" />
-          <p className="font-mono text-gray-500 text-sm tracking-widest uppercase">Initializing Map System...</p>
-        </div>
-      </div>
-    );
-  }
-
   const center = ambulancePosition || destination || defaultCenter;
 
   return (
@@ -147,8 +166,8 @@ export default function MapView({
         center={center}
         zoom={15}
         options={mapOptions}
-        onLoad={(map) => { mapRef.current = map; }}
-        onUnmount={() => { mapRef.current = null; }}
+        onLoad={onLoad}
+        onUnmount={onUnmount}
       >
         {/* Render Route Polyline */}
         {isEmergencyActive && routePoints.length > 0 && (
@@ -167,13 +186,11 @@ export default function MapView({
         {trafficSignals.map((signal) => {
           let color = "#ff4444";
           let scale = 7;
-          let glow = false;
           let zIndex = 2;
 
           if (signal.status === "green") {
             color = "#00e676";
             scale = 9;
-            glow = true;
             zIndex = 3;
           } else if (signal.status === "passed") {
             color = "#555555";
@@ -268,6 +285,45 @@ export default function MapView({
           </OverlayView>
         )}
       </GoogleMap>
+
+      {/* Floating Info Panel — Top-left glassmorphism overlay */}
+      {isEmergencyActive && destinationName && (
+        <div className="absolute top-4 left-4 z-20 pointer-events-none animate-in fade-in slide-in-from-top-3 duration-500">
+          <div className="bg-[#0a0e1a]/85 backdrop-blur-xl border border-white/[0.08] rounded-xl px-4 py-3 shadow-[0_8px_32px_rgba(0,0,0,0.5)] pointer-events-auto min-w-[200px]">
+            {/* Status dot + label */}
+            <div className="flex items-center gap-2 mb-2">
+              <div className="w-2 h-2 rounded-full bg-red-500 animate-pulse shadow-[0_0_8px_rgba(239,68,68,0.8)]" />
+              <span className="text-[10px] text-red-400 font-mono uppercase tracking-[0.2em] font-bold">En Route</span>
+            </div>
+            {/* Destination name */}
+            <p className="text-white font-mono text-sm font-semibold truncate max-w-[240px]">
+              {destinationName}
+            </p>
+            {/* Stats row */}
+            <div className="flex items-center gap-4 mt-2 pt-2 border-t border-white/[0.06]">
+              {etaMinutes !== undefined && (
+                <div className="flex items-center gap-1.5">
+                  <span className="text-amber-400 text-[10px]">⏱</span>
+                  <span className="text-amber-400 font-mono text-xs font-semibold">
+                    {formatTime(etaMinutes)}
+                  </span>
+                </div>
+              )}
+              {remainingDistanceM !== undefined && (
+                <div className="flex items-center gap-1.5">
+                  <span className="text-blue-400 text-[10px]">📍</span>
+                  <span className="text-blue-400 font-mono text-xs font-semibold">
+                    {formatDist(remainingDistanceM)}
+                  </span>
+                </div>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Map attribution gradient bar at bottom */}
+      <div className="absolute bottom-0 left-0 right-0 h-8 bg-gradient-to-t from-[#050b14]/60 to-transparent pointer-events-none" />
     </div>
   );
 }
