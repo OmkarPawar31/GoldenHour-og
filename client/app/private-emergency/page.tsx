@@ -316,10 +316,6 @@ export default function PrivateEmergencyDashboard() {
         origin: ORIGIN,
         destination: DESTINATION,
         travelMode: window.google.maps.TravelMode.DRIVING,
-        drivingOptions: {
-          departureTime: new Date(),
-          trafficModel: window.google.maps.TrafficModel.BEST_GUESS,
-        },
       },
       (result, status) => {
         if (status !== "OK" || !result) {

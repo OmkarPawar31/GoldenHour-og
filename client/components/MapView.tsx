@@ -5,7 +5,7 @@ import { useEffect, useRef } from "react";
 import { useJsApiLoader, GoogleMap, DirectionsRenderer, Marker, Polyline } from "@react-google-maps/api";
 import { Location, Hospital, RouteInfo } from "../types";
 
-const LIBRARIES: ("geometry")[] = ["geometry"];
+const LIBRARIES: ("geometry" | "places")[] = ["geometry", "places"];
 
 const MAP_STYLES = [
   { elementType: "geometry", stylers: [{ color: "#0f172a" }] },
@@ -31,6 +31,7 @@ interface MapViewProps {
   isDemoMode: boolean;
   onMapLoad: (map: google.maps.Map) => void;
   onHospitalSelect: (hospital: Hospital) => void;
+  ambulancePosition?: Location;
 }
 
 export default function MapView({
@@ -41,7 +42,8 @@ export default function MapView({
   routeInfo,
   isDemoMode,
   onMapLoad,
-  onHospitalSelect
+  onHospitalSelect,
+  ambulancePosition
 }: MapViewProps) {
   const { isLoaded, loadError } = useJsApiLoader({
     id: "google-map-script",
@@ -97,13 +99,21 @@ export default function MapView({
 
   // FIX 4: fitBounds on route load to show full route
   useEffect(() => {
-    if (mapRef.current && directions) {
-      const route = directions.routes[0];
-      if (route && route.bounds) {
-        mapRef.current.fitBounds(route.bounds, { top: 80, left: 40, right: 40, bottom: 160 });
-      }
+    if (mapRef.current) {
+        if (directions) {
+          const route = directions.routes[0];
+          if (route && route.bounds) {
+            mapRef.current.fitBounds(route.bounds, { top: 80, left: 40, right: 40, bottom: 160 });
+          }
+        } else if (routeInfo && routeInfo.routePoints.length > 0) {
+            const bounds = new window.google.maps.LatLngBounds();
+            routeInfo.routePoints.forEach(p => {
+                bounds.extend(new window.google.maps.LatLng(p.lat, p.lng));
+            });
+            mapRef.current.fitBounds(bounds, { top: 80, left: 40, right: 40, bottom: 160 });
+        }
     }
-  }, [directions]);
+  }, [directions, routeInfo]);
 
   // FIX 4: pan to current location during navigation
   useEffect(() => {
@@ -147,9 +157,17 @@ export default function MapView({
           zoomControl: true,
         }}
       >
-        {origin && (
+        {origin && !ambulancePosition && (
           <Marker
             position={origin}
+            icon={ambulanceIcon}
+            zIndex={200}
+          />
+        )}
+        
+        {ambulancePosition && (
+          <Marker
+            position={ambulancePosition}
             icon={ambulanceIcon}
             zIndex={200}
           />
@@ -166,7 +184,7 @@ export default function MapView({
         ))}
 
         {/* FIX 2: White border polyline behind route for outline effect */}
-        {directions && routeInfo && routeInfo.routePoints.length > 0 && (
+        {routeInfo && routeInfo.routePoints.length > 0 && (
           <Polyline
             path={routeInfo.routePoints}
             options={{
@@ -178,7 +196,20 @@ export default function MapView({
           />
         )}
 
-        {/* FIX 2: Main route with Google Maps blue styling and DirectionsRenderer */}
+        {/* Custom blue style polyline because we bypassed DirectionsRenderer */}
+        {routeInfo && routeInfo.routePoints.length > 0 && !directions && (
+          <Polyline
+            path={routeInfo.routePoints}
+            options={{
+              strokeColor: "#4285F4",
+              strokeWeight: 6,
+              strokeOpacity: 1.0,
+              zIndex: 10,
+            }}
+          />
+        )}
+
+        {/* Fallback to DirectionsRenderer if directions exist */}
         {directions && (
           <DirectionsRenderer
             directions={directions}

@@ -138,5 +138,5 @@ export function useNearbyHospitals() {
     [fetchHospitals]
   );
 
-  return { hospitals, fetchHospitals, resetAndRetry, loading, error };
+  return { hospitals, setHospitals, fetchHospitals, resetAndRetry, loading, error };
 }

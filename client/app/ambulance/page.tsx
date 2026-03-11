@@ -8,6 +8,9 @@ import { useNearbyHospitals } from "../../hooks/useNearbyHospitals";
 import { useDirectionsRoute } from "../../hooks/useDirectionsRoute";
 import HospitalCard from "../../components/HospitalCard";
 import RouteInfoBar from "../../components/RouteInfoBar";
+import HospitalSearch from "../../components/HospitalSearch";
+import LiveTracker from "../../components/LiveTracker";
+import { useAmbulanceSimulation } from "../../hooks/useAmbulanceSimulation";
 import { haversineMeters } from "../../utils/geoUtils";
 import { Location, Hospital } from "../../types";
 
@@ -33,7 +36,7 @@ export default function AmbulancePage() {
     return () => clearTimeout(timer);
   }, [location]);
 
-  const { hospitals, fetchHospitals, resetAndRetry, loading: searchingHospitals, error: hospitalsError } = useNearbyHospitals();
+  const { hospitals, setHospitals, fetchHospitals, resetAndRetry, loading: searchingHospitals, error: hospitalsError } = useNearbyHospitals();
   const { directions, routeInfo, fetchRoute } = useDirectionsRoute();
 
   const [selectedHospitalId, setSelectedHospitalId] = useState<string | null>(null);
@@ -107,8 +110,28 @@ export default function AmbulancePage() {
     }
   }, [location]); // ONLY depend on location to prevent infinite loops
 
+  const [isEmergencyActive, setIsEmergencyActive] = useState(false);
+
+  const {
+      ambulancePosition,
+      trafficSignals,
+      remainingDistanceM,
+      etaMinutes,
+      nextSignalDistanceM,
+      greenSignalCount,
+      totalSignalCount,
+      speedKmh,
+      setSpeed,
+      isComplete,
+      progressPercent
+  } = useAmbulanceSimulation({
+      routePoints: routeInfo?.routePoints || [],
+      realGpsLocation: origin,
+      isActive: isEmergencyActive
+  });
+
   const handleStartEmergency = () => {
-    alert(`Emergency started for ${selectedHospital?.name}`);
+    setIsEmergencyActive(true);
   };
 
   const handleChangeHospital = () => {
@@ -148,11 +171,34 @@ export default function AmbulancePage() {
               isDemoMode={demoMode}
               onMapLoad={handleMapLoad}
               onHospitalSelect={handleHospitalSelect}
+              ambulancePosition={ambulancePosition || undefined}
             />
           )}
         </div>
 
         <div id="hospital-cards-panel" className="w-full lg:w-[35%] lg:h-full overflow-y-auto p-4 flex flex-col gap-4 border-t lg:border-t-0 lg:border-l border-gray-800 bg-[#050B14]">
+          <div className="w-full z-50 mb-2">
+            <HospitalSearch
+              isLoaded={typeof window !== "undefined" && !!window.google?.maps?.places}
+              currentLocation={origin || undefined}
+              onHospitalSelect={(h) => {
+                if (!origin) return;
+                const newHospital: Hospital = {
+                  id: `search-${Date.now()}`,
+                  name: h.name,
+                  address: h.address,
+                  location: { lat: h.lat, lng: h.lng },
+                  distance: haversineMeters(origin, { lat: h.lat, lng: h.lng }),
+                };
+                setHospitals((prev) => {
+                  const filtered = prev.filter(p => Math.abs(p.location.lat - h.lat) > 0.0001 || Math.abs(p.location.lng - h.lng) > 0.0001);
+                  return [newHospital, ...filtered];
+                });
+                handleHospitalSelect(newHospital);
+              }}
+            />
+          </div>
+
           <h2 className="text-white font-bold tracking-widest uppercase mb-1 text-sm flex items-center justify-between">
             <span>Nearby Hospitals</span>
             {searchingHospitals && <span className="w-3 h-3 border-2 border-blue-500/30 border-t-blue-500 rounded-full animate-spin"></span>}
@@ -183,6 +229,24 @@ export default function AmbulancePage() {
                 </button>
               )}
             </div>
+          )}
+
+          {isEmergencyActive && (
+              <div className="w-full flex-1 min-h-[400px]">
+                  <LiveTracker
+                      isEmergencyActive={isEmergencyActive}
+                      remainingDistanceM={remainingDistanceM}
+                      etaMinutes={etaMinutes}
+                      nextSignalDistanceM={nextSignalDistanceM}
+                      greenSignalCount={greenSignalCount}
+                      totalSignalCount={totalSignalCount}
+                      speedKmh={speedKmh}
+                      onSpeedChange={setSpeed}
+                      gpsLocation={ambulancePosition || origin}
+                      isComplete={isComplete}
+                      progressPercent={progressPercent}
+                  />
+              </div>
           )}
         </div>
       </div>
