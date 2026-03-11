@@ -621,13 +621,13 @@ export default function HomePage() {
             </div>
             <div className="hero-stats">
               {[{ num: "<3s", label: "Alert Latency" }, { num: "200m", label: "Geo-fence Radius" }, { num: "4", label: "User Roles" }].map((s, i) => (
-                <>
-                  {i > 0 && <div key={`d${i}`} className="stat-divider" />}
-                  <div key={s.label}>
+                <div key={`stat-${i}`}>
+                  {i > 0 && <div className="stat-divider" />}
+                  <div>
                     <span className="stat-num">{s.num}</span>
                     <span className="stat-label">{s.label}</span>
                   </div>
-                </>
+                </div>
               ))}
             </div>
           </div>
