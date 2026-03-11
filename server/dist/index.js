@@ -14,6 +14,7 @@ const emergency_routes_1 = __importDefault(require("./routes/emergency.routes"))
 const user_routes_1 = __importDefault(require("./routes/user.routes"));
 const admin_routes_1 = __importDefault(require("./routes/admin.routes"));
 const tracking_routes_1 = __importDefault(require("./routes/tracking.routes"));
+const hospital_routes_1 = __importDefault(require("./routes/hospital.routes"));
 const error_middleware_1 = require("./middleware/error.middleware");
 const app = (0, express_1.default)();
 const server = http_1.default.createServer(app);
@@ -25,6 +26,7 @@ app.use("/api/emergency", emergency_routes_1.default);
 app.use("/api/users", user_routes_1.default);
 app.use("/api/admin", admin_routes_1.default);
 app.use("/api/tracking", tracking_routes_1.default);
+app.use("/api/hospital", hospital_routes_1.default);
 // Error handler
 app.use(error_middleware_1.errorHandler);
 async function start() {

@@ -58,10 +58,32 @@ export default function AmbulancePage() {
     libraries: ["places", "geometry"],
   });
 
-  // Use Maps DirectionsService directly for the route
+  // Helper to generate an OSRM route as a fallback, instead of Google Maps API which might throw REQUEST_DENIED
+  const generateRouteFallback = async (origin: { lat: number; lng: number }, dest: { lat: number; lng: number }): Promise<{ lat: number; lng: number }[]> => {
+    try {
+      const response = await fetch(`https://router.project-osrm.org/route/v1/driving/${origin.lng},${origin.lat};${dest.lng},${dest.lat}?overview=full&geometries=geojson`);
+      if (!response.ok) throw new Error("OSRM failed");
+      const data = await response.json();
+      if (data.code !== 'Ok' || !data.routes || data.routes.length === 0) throw new Error("OSRM no match");
+      return data.routes[0].geometry.coordinates.map((c: number[]) => ({
+        lat: c[1],
+        lng: c[0]
+      }));
+    } catch (err) {
+      console.error("OSRM Route fallback error:", err);
+      throw err;
+    }
+  };
+
+  // Use Maps DirectionsService directly for the route, with OSRM fallback
   const generateRoute = async (origin: { lat: number; lng: number }, dest: { lat: number; lng: number }) => {
-    return new Promise<{ path: { lat: number; lng: number }[]; result: google.maps.DirectionsResult }>((resolve, reject) => {
-      if (!window.google || !window.google.maps) return reject("Google Maps not loaded");
+    return new Promise<{ path: { lat: number; lng: number }[]; result: google.maps.DirectionsResult | null }>((resolve, reject) => {
+      if (!window.google || !window.google.maps) {
+        generateRouteFallback(origin, dest)
+          .then(path => resolve({ path, result: null }))
+          .catch(reject);
+        return;
+      }
 
       const svc = new window.google.maps.DirectionsService();
       svc.route(
@@ -70,7 +92,7 @@ export default function AmbulancePage() {
           destination: dest,
           travelMode: window.google.maps.TravelMode.DRIVING,
         },
-        (result, status) => {
+        async (result, status) => {
           if (status === "OK" && result) {
             const path: { lat: number; lng: number }[] = [];
             result.routes[0].legs[0].steps.forEach((step) => {
@@ -84,8 +106,13 @@ export default function AmbulancePage() {
             });
             resolve({ path, result });
           } else {
-            console.error("Directions request failed due to " + status);
-            reject(status);
+            console.error("Directions request failed due to " + status + ". Falling back to OSRM...");
+            try {
+              const fallbackPath = await generateRouteFallback(origin, dest);
+              resolve({ path: fallbackPath, result: null });
+            } catch (fallbackError) {
+              reject(status);
+            }
           }
         }
       );

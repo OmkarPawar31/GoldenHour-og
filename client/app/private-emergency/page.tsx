@@ -310,6 +310,73 @@ export default function PrivateEmergencyDashboard() {
       addLog("No auth token — running in simulation mode", "warn");
     }
 
+    const startSimulationWithPath = (fullPath: google.maps.LatLng[], distText: string, durText: string) => {
+      routePath.current = fullPath;
+      routeIndex.current = 0;
+
+      setEtaText(durText);
+      setDistText(distText);
+
+      addLog(`Route: ${distText} · ${durText}`, "success");
+      addLog("Green corridor activating (P-70)…", "warn");
+
+      drawCorridor(fullPath);
+      placeVehicle(ORIGIN, 0);
+
+      const bounds = new window.google.maps.LatLngBounds();
+      fullPath.forEach(p => bounds.extend(p));
+      mapObj.current!.fitBounds(bounds, { top: 60, right: 40, bottom: 80, left: 40 });
+
+      setTimeout(() => {
+        addLog("Geo-fence active: 200m radius", "success");
+        addLog("Broadcasting alerts to nearby drivers", "info");
+        setNearbyCount(Math.floor(3 + Math.random() * 5));
+      }, 900);
+
+      timerRef.current = setInterval(() => setElapsed(s => s + 1), 1000);
+
+      moveRef.current = setInterval(() => {
+        routeIndex.current = Math.min(routeIndex.current + 2, fullPath.length - 1);
+        const pos = fullPath[routeIndex.current];
+        const next = fullPath[Math.min(routeIndex.current + 1, fullPath.length - 1)];
+
+        const heading = window.google.maps.geometry.spherical.computeHeading(pos, next);
+        placeVehicle(pos, heading);
+        geofenceCircle.current?.setCenter(pos);
+
+        setGps({ lat: pos.lat(), lng: pos.lng() });
+        setSpeed(Math.floor(38 + Math.random() * 32));
+        setNearbyCount(Math.floor(2 + Math.random() * 7));
+
+        if (routeIndex.current >= fullPath.length - 1) {
+          clearInterval(moveRef.current!);
+          addLog("Destination reached", "success");
+        }
+      }, 700);
+    };
+
+    const tryOsrmFallback = async () => {
+      try {
+        addLog("Attempting OSRM fallback...", "info");
+        const response = await fetch(`https://router.project-osrm.org/route/v1/driving/${ORIGIN.lng},${ORIGIN.lat};${DESTINATION.lng},${DESTINATION.lat}?overview=full&geometries=geojson`);
+        if (!response.ok) throw new Error("OSRM failed");
+        const data = await response.json();
+        if (data.code !== 'Ok' || !data.routes || data.routes.length === 0) throw new Error("OSRM no match");
+        
+        const fullPath = data.routes[0].geometry.coordinates.map((c: number[]) => new window.google.maps.LatLng(c[1], c[0]));
+        const leg = data.routes[0];
+        
+        startSimulationWithPath(
+          fullPath, 
+          `${(leg.distance / 1000).toFixed(1)} km`, 
+          `${Math.ceil(leg.duration / 60)} mins`
+        );
+      } catch (err) {
+        addLog("OSRM Route fallback failed too", "error");
+        setSession("idle");
+      }
+    };
+
     const svc = new window.google.maps.DirectionsService();
     svc.route(
       {
@@ -319,8 +386,8 @@ export default function PrivateEmergencyDashboard() {
       },
       (result, status) => {
         if (status !== "OK" || !result) {
-          addLog("Route request failed: " + status, "error");
-          setSession("idle");
+          addLog("Google Route failed: " + status, "error");
+          tryOsrmFallback();
           return;
         }
 
@@ -335,48 +402,11 @@ export default function PrivateEmergencyDashboard() {
           }
         });
 
-        routePath.current = fullPath;
-        routeIndex.current = 0;
-
-        setEtaText(leg.duration_in_traffic?.text ?? leg.duration?.text ?? "--");
-        setDistText(leg.distance?.text ?? "--");
-
-        addLog(`Route: ${leg.distance?.text ?? "?"} · ${leg.duration?.text ?? "?"}`, "success");
-        addLog("Green corridor activating (P-70)…", "warn");
-
-        drawCorridor(fullPath);
-        placeVehicle(ORIGIN, 0);
-
-        const bounds = new window.google.maps.LatLngBounds();
-        fullPath.forEach(p => bounds.extend(p));
-        mapObj.current!.fitBounds(bounds, { top: 60, right: 40, bottom: 80, left: 40 });
-
-        setTimeout(() => {
-          addLog("Geo-fence active: 200m radius", "success");
-          addLog("Broadcasting alerts to nearby drivers", "info");
-          setNearbyCount(Math.floor(3 + Math.random() * 5));
-        }, 900);
-
-        timerRef.current = setInterval(() => setElapsed(s => s + 1), 1000);
-
-        moveRef.current = setInterval(() => {
-          routeIndex.current = Math.min(routeIndex.current + 2, fullPath.length - 1);
-          const pos = fullPath[routeIndex.current];
-          const next = fullPath[Math.min(routeIndex.current + 1, fullPath.length - 1)];
-
-          const heading = window.google.maps.geometry.spherical.computeHeading(pos, next);
-          placeVehicle(pos, heading);
-          geofenceCircle.current?.setCenter(pos);
-
-          setGps({ lat: pos.lat(), lng: pos.lng() });
-          setSpeed(Math.floor(38 + Math.random() * 32));
-          setNearbyCount(Math.floor(2 + Math.random() * 7));
-
-          if (routeIndex.current >= fullPath.length - 1) {
-            clearInterval(moveRef.current!);
-            addLog("Destination reached", "success");
-          }
-        }, 700);
+        startSimulationWithPath(
+          fullPath, 
+          leg.distance?.text ?? "--", 
+          leg.duration_in_traffic?.text ?? leg.duration?.text ?? "--"
+        );
       }
     );
   }, [addLog, drawCorridor, placeVehicle]);
