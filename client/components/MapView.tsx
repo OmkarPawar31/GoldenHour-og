@@ -41,6 +41,7 @@ export interface MapViewProps {
   // Ambulance depot
   ambulanceDepot?: Location | null;
   currentLeg?: 'depot-to-patient' | 'patient-to-hospital' | 'idle';
+  nearbyAmbulances?: { id: string, lat: number, lng: number }[];
 
   // Dummy cars
   dummyCars?: DummyCar[];
@@ -128,6 +129,7 @@ export default function MapView({
   remainingDistanceM,
   ambulanceDepot,
   currentLeg = 'idle',
+  nearbyAmbulances = [],
   dummyCars = [],
   viewMode = "ambulance",
   onMapLoad,
@@ -302,11 +304,11 @@ export default function MapView({
         onUnmount={onUnmount}
       >
         {/* Origin / Patient GPS marker (when no ambulance simulation is running) */}
-        {origin && !ambulancePosition && (
+        {origin && !ambulancePosition && typeof window !== 'undefined' && window.google?.maps?.SymbolPath && (
           <Marker
             position={origin}
             icon={{
-              path: google.maps.SymbolPath.CIRCLE,
+              path: window.google.maps.SymbolPath.CIRCLE,
               fillColor: "#2979FF",
               fillOpacity: 1,
               strokeColor: "#ffffff",
@@ -385,14 +387,32 @@ export default function MapView({
           </OverlayView>
         )}
 
+        {/* Nearby Idle Ambulances */}
+        {!isEmergencyActive && nearbyAmbulances.map(amb => (
+          <OverlayView
+            key={amb.id}
+            position={{ lat: amb.lat, lng: amb.lng }}
+            mapPaneName={OverlayView.OVERLAY_MOUSE_TARGET}
+          >
+            <div className="absolute top-0 left-0 -translate-x-1/2 -translate-y-1/2 z-[70] drop-shadow-md opacity-80 hover:opacity-100 transition-opacity cursor-pointer">
+              <div className="w-8 h-8 bg-white rounded-full border-[2px] border-amber-500 flex items-center justify-center shadow-[0_0_10px_rgba(245,158,11,0.3)]">
+                <span className="text-amber-500 text-sm">🚑</span>
+              </div>
+              <div className="absolute top-full left-1/2 -translate-x-1/2 mt-1 px-1.5 py-0.5 bg-amber-900/80 text-amber-100 text-[9px] font-mono rounded whitespace-nowrap border border-amber-500/30">
+                {amb.id}
+              </div>
+            </div>
+          </OverlayView>
+        ))}
+
         {/* Hospital markers */}
-        {hospitals.map((h) => (
+        {hospitals?.map((h) => typeof window !== 'undefined' && window.google?.maps?.SymbolPath ? (
           <Marker
             key={h.id}
             position={h.location}
             onClick={() => onHospitalSelect?.(h)}
             icon={{
-              path: google.maps.SymbolPath.CIRCLE,
+              path: window.google.maps.SymbolPath.CIRCLE,
               fillColor: h.id === selectedHospitalId ? "#ff4444" : "#4285F4",
               fillOpacity: 1,
               strokeColor: "#ffffff",
@@ -401,7 +421,7 @@ export default function MapView({
             }}
             zIndex={h.id === selectedHospitalId ? 100 : 1}
           />
-        ))}
+        ) : null)}
 
         {/* Route polyline from routeInfo (non-emergency preview) */}
         {routeInfo && routeInfo.routePoints.length > 0 && !directions && (
@@ -462,13 +482,13 @@ export default function MapView({
             zIndex = 1;
           }
 
-          return (
+          return typeof window !== 'undefined' && window.google?.maps?.SymbolPath ? (
             <Marker
               key={signal.id}
               position={{ lat: signal.lat, lng: signal.lng }}
               zIndex={zIndex}
               icon={{
-                path: google.maps.SymbolPath.CIRCLE,
+                path: window.google.maps.SymbolPath.CIRCLE,
                 fillColor: color,
                 fillOpacity: signal.status === "passed" ? 0.6 : 1,
                 strokeColor: "#ffffff",
@@ -476,7 +496,7 @@ export default function MapView({
                 scale: scale,
               }}
             />
-          );
+          ) : null;
         })}
 
         {/* Green Signal Pulse Overlays */}

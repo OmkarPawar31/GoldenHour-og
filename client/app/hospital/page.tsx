@@ -149,7 +149,7 @@ export default function HospitalDashboard() {
     };
 
     useEffect(() => {
-        if (window.google?.maps) { setMapReady(true); return; }
+        if (typeof window !== 'undefined' && window.google?.maps) { setMapReady(true); return; }
         const s = document.createElement("script");
         s.src = `https://maps.googleapis.com/maps/api/js?key=${MAPS_API_KEY}&libraries=geometry,places`;
         s.async = true;
