@@ -221,15 +221,15 @@ export default function MapView({
       const animatePan = (currentTime: number) => {
         const elapsed = currentTime - startTime;
         const progress = Math.min(elapsed / duration, 1);
-        
+
         // Custom easing (smooth step)
         const ease = progress * progress * (3 - 2 * progress);
-        
+
         const currentLat = startLat + (endLat - startLat) * ease;
         const currentLng = startLng + (endLng - startLng) * ease;
-        
+
         mapRef.current?.setCenter({ lat: currentLat, lng: currentLng });
-        
+
         if (progress < 1) {
           requestAnimationFrame(animatePan);
         } else {
@@ -243,7 +243,7 @@ export default function MapView({
           }, 2000); // Wait 2s at hospital before snapping back to driver
         }
       };
-      
+
       requestAnimationFrame(animatePan);
     }
     prevIsEmergencyRef.current = isEmergencyActive;
@@ -255,7 +255,7 @@ export default function MapView({
       mapRef.current.panTo(ambulancePosition);
       // Dynamically zoom based on speed if we want, or keep fixed
       if (mapRef.current.getZoom()! < 18) {
-         mapRef.current.setZoom(18);
+        mapRef.current.setZoom(18);
       }
     }
   }, [ambulancePosition, isEmergencyActive, isIntroAnimating]);
@@ -462,9 +462,8 @@ export default function MapView({
               {isAnimatingDestination && (
                 <div className="absolute -inset-3 bg-red-500/30 rounded-full animate-pulse pointer-events-none" />
               )}
-              <div className={`w-8 h-8 bg-red-600 rounded-full border-2 border-white flex items-center justify-center relative shadow-lg transition-all duration-300 ${
-                isAnimatingDestination ? "scale-110 shadow-[0_0_20px_rgba(220,38,38,0.8)]" : ""
-              }`}>
+              <div className={`w-8 h-8 bg-red-600 rounded-full border-2 border-white flex items-center justify-center relative shadow-lg transition-all duration-300 ${isAnimatingDestination ? "scale-110 shadow-[0_0_20px_rgba(220,38,38,0.8)]" : ""
+                }`}>
                 <span className="text-white font-bold font-mono text-sm">H</span>
                 {/* Pointer tip */}
                 <div className="absolute -bottom-2 w-0 h-0 border-l-[6px] border-l-transparent border-r-[6px] border-r-transparent border-t-[8px] border-t-red-600" />
@@ -512,47 +511,40 @@ export default function MapView({
           <div className="bg-[#0a0e1a]/85 backdrop-blur-xl border border-white/[0.08] rounded-xl px-4 py-3 shadow-[0_8px_32px_rgba(0,0,0,0.5)] pointer-events-auto min-w-[220px]">
             {/* Status dot + label */}
             <div className="flex items-center gap-2 mb-2">
-              <div className={`w-2 h-2 rounded-full animate-pulse shadow-[0_0_8px] ${
-                currentLeg === 'depot-to-patient'
+              <div className={`w-2 h-2 rounded-full animate-pulse shadow-[0_0_8px] ${currentLeg === 'depot-to-patient'
                   ? 'bg-blue-500 shadow-blue-500/80'
                   : 'bg-red-500 shadow-red-500/80'
-              }`} />
-              <span className={`text-[10px] font-mono uppercase tracking-[0.2em] font-bold ${
-                currentLeg === 'depot-to-patient' ? 'text-blue-400' : 'text-red-400'
-              }`}>
+                }`} />
+              <span className={`text-[10px] font-mono uppercase tracking-[0.2em] font-bold ${currentLeg === 'depot-to-patient' ? 'text-blue-400' : 'text-red-400'
+                }`}>
                 {currentLeg === 'depot-to-patient' ? 'Picking Up Patient' : 'En Route to Hospital'}
               </span>
             </div>
 
             {/* Route flow indicator */}
             <div className="flex items-center gap-1.5 mb-2 px-1">
-              <div className={`w-5 h-5 rounded flex items-center justify-center text-xs ${
-                currentLeg === 'depot-to-patient'
+              <div className={`w-5 h-5 rounded flex items-center justify-center text-xs ${currentLeg === 'depot-to-patient'
                   ? 'bg-blue-500/30 border border-blue-400/50'
                   : 'bg-blue-500/10 border border-blue-400/20'
-              }`}>🚑</div>
-              <div className={`flex-1 h-[2px] ${
-                currentLeg === 'depot-to-patient'
+                }`}>🚑</div>
+              <div className={`flex-1 h-[2px] ${currentLeg === 'depot-to-patient'
                   ? 'bg-gradient-to-r from-blue-500 to-blue-300 animate-pulse'
                   : 'bg-blue-500/20'
-              }`} />
-              <div className={`w-5 h-5 rounded flex items-center justify-center text-xs ${
-                currentLeg === 'depot-to-patient'
+                }`} />
+              <div className={`w-5 h-5 rounded flex items-center justify-center text-xs ${currentLeg === 'depot-to-patient'
                   ? 'bg-emerald-500/30 border border-emerald-400/50 animate-pulse'
                   : currentLeg === 'patient-to-hospital'
                     ? 'bg-emerald-500/30 border border-emerald-400/50'
                     : 'bg-emerald-500/10 border border-emerald-400/20'
-              }`}>🧑</div>
-              <div className={`flex-1 h-[2px] ${
-                currentLeg === 'patient-to-hospital'
+                }`}>🧑</div>
+              <div className={`flex-1 h-[2px] ${currentLeg === 'patient-to-hospital'
                   ? 'bg-gradient-to-r from-emerald-500 to-red-400 animate-pulse'
                   : 'bg-gray-600/30'
-              }`} />
-              <div className={`w-5 h-5 rounded flex items-center justify-center text-xs ${
-                currentLeg === 'patient-to-hospital'
+                }`} />
+              <div className={`w-5 h-5 rounded flex items-center justify-center text-xs ${currentLeg === 'patient-to-hospital'
                   ? 'bg-red-500/30 border border-red-400/50 animate-pulse'
                   : 'bg-red-500/10 border border-red-400/20'
-              }`}>🏥</div>
+                }`}>🏥</div>
             </div>
 
             {/* Destination name */}
@@ -582,8 +574,11 @@ export default function MapView({
         </div>
       )}
 
-      {/* Map attribution gradient bar at bottom */}
-      <div className="absolute bottom-0 left-0 right-0 h-8 bg-gradient-to-t from-[#050b14]/60 to-transparent pointer-events-none" />
+      {/* Map edge gradient overlays for depth */}
+      <div className="absolute bottom-0 left-0 right-0 h-10 bg-gradient-to-t from-[#050b14]/70 to-transparent pointer-events-none" />
+      <div className="absolute top-0 left-0 right-0 h-6 bg-gradient-to-b from-[#050b14]/40 to-transparent pointer-events-none" />
+      <div className="absolute top-0 left-0 bottom-0 w-4 bg-gradient-to-r from-[#050b14]/30 to-transparent pointer-events-none" />
+      <div className="absolute top-0 right-0 bottom-0 w-4 bg-gradient-to-l from-[#050b14]/30 to-transparent pointer-events-none" />
     </div>
   );
 }

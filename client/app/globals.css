@@ -1,5 +1,24 @@
 @import "tailwindcss";
 
+/* ── Tailwind v4 Theme Extension ── */
+@theme {
+  --font-sans: 'Inter', system-ui, -apple-system, sans-serif;
+
+  /* Custom animation definitions for Tailwind v4 */
+  --animate-shimmer: shimmer 2s ease-in-out infinite;
+  --animate-float: float 6s ease-in-out infinite;
+  --animate-gradient-shift: gradient-shift 4s ease infinite;
+  --animate-slide-up: slide-up 0.5s ease-out forwards;
+  --animate-pulse-glow: pulse-glow 2s ease-in-out infinite;
+  --animate-heartbeat: heartbeat 1.5s ease-in-out infinite;
+  --animate-border-glow: border-glow 3s ease-in-out infinite;
+  --animate-fade-in-up: fade-in-up 0.4s ease-out forwards;
+  --animate-glow-pulse: glow-pulse 2s ease-in-out infinite;
+  --animate-slide-in-right: slide-in-right 0.35s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+  --animate-slide-out-right: slide-out-right 0.3s ease-in forwards;
+  --animate-dot-travel: dot-travel 2s ease-in-out infinite;
+}
+
 /* Light Theme Global Overrides */
 :root {
   --gh-orange: #E8571A;
@@ -18,3 +37,98 @@
 
 * { box-sizing: border-box; margin: 0; padding: 0; }
 html { scroll-behavior: smooth; }
+
+/* ── Custom Keyframe Animations ── */
+
+@keyframes shimmer {
+  0% { transform: translateX(-100%); }
+  100% { transform: translateX(100%); }
+}
+
+@keyframes float {
+  0%, 100% { transform: translateY(0px); }
+  50% { transform: translateY(-8px); }
+}
+
+@keyframes gradient-shift {
+  0% { background-position: 0% 50%; }
+  50% { background-position: 100% 50%; }
+  100% { background-position: 0% 50%; }
+}
+
+@keyframes slide-up {
+  from { opacity: 0; transform: translateY(16px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+@keyframes pulse-glow {
+  0%, 100% { box-shadow: 0 0 15px rgba(239, 68, 68, 0.3); }
+  50% { box-shadow: 0 0 30px rgba(239, 68, 68, 0.6), 0 0 60px rgba(239, 68, 68, 0.2); }
+}
+
+@keyframes heartbeat {
+  0%, 100% { transform: scale(1); }
+  14% { transform: scale(1.15); }
+  28% { transform: scale(1); }
+  42% { transform: scale(1.1); }
+  56% { transform: scale(1); }
+}
+
+@keyframes border-glow {
+  0%, 100% { border-color: rgba(59, 130, 246, 0.15); }
+  50% { border-color: rgba(239, 68, 68, 0.4); }
+}
+
+@keyframes fade-in-up {
+  from { opacity: 0; transform: translateY(12px) scale(0.98); }
+  to { opacity: 1; transform: translateY(0) scale(1); }
+}
+
+@keyframes glow-pulse {
+  0%, 100% { box-shadow: 0 0 8px var(--glow-color, rgba(59, 130, 246, 0.2)); }
+  50% { box-shadow: 0 0 20px var(--glow-color, rgba(59, 130, 246, 0.4)), 0 0 40px var(--glow-color, rgba(59, 130, 246, 0.1)); }
+}
+
+@keyframes slide-in-right {
+  from { opacity: 0; transform: translateX(100%); }
+  to { opacity: 1; transform: translateX(0); }
+}
+
+@keyframes slide-out-right {
+  from { opacity: 1; transform: translateX(0); }
+  to { opacity: 0; transform: translateX(100%); }
+}
+
+@keyframes dot-travel {
+  0% { left: 0%; opacity: 0; }
+  10% { opacity: 1; }
+  90% { opacity: 1; }
+  100% { left: 100%; opacity: 0; }
+}
+
+/* ── Utility Classes (non-Tailwind) ── */
+
+/* Staggered entrance delays */
+.delay-0 { animation-delay: 0ms !important; }
+.delay-1 { animation-delay: 80ms !important; }
+.delay-2 { animation-delay: 160ms !important; }
+.delay-3 { animation-delay: 240ms !important; }
+
+/* Toast animations */
+.toast-enter { animation: slide-in-right 0.35s cubic-bezier(0.16, 1, 0.3, 1) forwards; }
+.toast-exit { animation: slide-out-right 0.3s ease-in forwards; }
+
+/* Custom scrollbar for dark panels */
+.dark-scroll::-webkit-scrollbar {
+  width: 5px;
+}
+.dark-scroll::-webkit-scrollbar-track {
+  background: transparent;
+}
+.dark-scroll::-webkit-scrollbar-thumb {
+  background: rgba(255, 255, 255, 0.08);
+  border-radius: 10px;
+}
+.dark-scroll::-webkit-scrollbar-thumb:hover {
+  background: rgba(255, 255, 255, 0.15);
+}
