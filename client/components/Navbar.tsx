@@ -111,6 +111,7 @@ export default function Navbar() {
               <Link href="/login/hospital"  className="gh-nav-portal-btn" style={{ ["--portal-clr" as string]: "#3B82F6" }}>🏥 Hospital</Link>
               <Link href="/login/operator"  className="gh-nav-portal-btn" style={{ ["--portal-clr" as string]: "#8B5CF6" }}>📋 Operator</Link>
               <Link href="/login/admin"     className="gh-nav-portal-btn" style={{ ["--portal-clr" as string]: "#10B981" }}>🖥️ Admin / Traffic Control</Link>
+              <Link href="/signal"          className="gh-nav-portal-btn" style={{ ["--portal-clr" as string]: "#F59E0B" }}>🚦 Smart Signal</Link>
               <a href="#" onClick={openEmergencyModal} className="gh-nav-portal-btn gh-nav-portal-btn--emergency">🆘 Emergency User</a>
             </div>
           )}
@@ -134,6 +135,7 @@ export default function Navbar() {
               <Link href="/login/hospital"><span>🏥</span> Hospital Control</Link>
               <Link href="/login/operator"><span>📋</span> Event Operator</Link>
               <Link href="/login/admin"><span>🖥️</span> Admin / Traffic</Link>
+              <Link href="/signal"><span>🚦</span> Smart Signal</Link>
               <a href="#" onClick={openEmergencyModal}><span>🆘</span> Emergency User</a>
             </>
           )}

@@ -207,6 +207,7 @@ export default function HomePage() {
             <Link href="/login/operator"  className="rp-card" style={{ ["--accent" as string]: "#8B5CF6" }}><span className="rp-icon">📋</span><div><div>Operator</div><div className="rp-sub">EVENT SYNC</div></div></Link>
             <Link href="/login/admin"     className="rp-card" style={{ ["--accent" as string]: "#10B981" }}><span className="rp-icon">🖥️</span><div><div>Admin</div><div className="rp-sub">FULL ACCESS</div></div></Link>
             <Link href="/private-emergency" className="rp-card" style={{ ["--accent" as string]: "#F59E0B" }}><span className="rp-icon">🆘</span><div><div>Emergency</div><div className="rp-sub">P-70 CORRIDOR</div></div></Link>
+            <Link href="/signal" className="rp-card" style={{ ["--accent" as string]: "#EF4444" }}><span className="rp-icon">🚦</span><div><div>Signal</div><div className="rp-sub">DIGITAL NODE</div></div></Link>
           </div>
         </div>
       </section>
@@ -248,6 +249,7 @@ export default function HomePage() {
             { icon: "📋", name: "Event Operator",    desc: "Coordinate with emergency flow safely during major public gatherings.",        priority: "PRIORITY 30 — ADVISORY", color: "#8B5CF6", href: "/login/operator" },
             { icon: "🙋", name: "Normal Driver",     desc: "Passive mode. Receives alerts and lane-clearance suggestions automatically.",   priority: "PRIORITY 10 — STANDARD", color: "#3B82F6", href: "/driver" },
             { icon: "🖥️", name: "Admin / Traffic",  desc: "Monitor all active corridors, approve requests, view live ETAs.",              priority: "CONTROL — FULL ACCESS",  color: "#10B981", href: "/login/admin" },
+            { icon: "🚦", name: "Smart Signal",      desc: "Digital intelligent signage. Auto-alerts drivers visually when ambulance approaches.", priority: "NODE — DISPLAY ONLY", color: "#EF4444", href: "/signal" },
           ].map((r) => (
             <Link key={r.name} href={r.href} className="role-card" style={{ ["--accent-color" as string]: r.color }}>
               <span className="role-icon">{r.icon}</span><div className="role-name">{r.name}</div>
