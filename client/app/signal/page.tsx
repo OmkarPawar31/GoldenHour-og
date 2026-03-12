@@ -37,8 +37,8 @@ function haversineM(p1: { lat: number; lng: number }, p2: { lat: number; lng: nu
 const PROXIMITY_ALERT_RADIUS_M = 1200; // Alert when ambulance is within 1.2km of signal
 
 export default function SignalDashboard() {
-  const [signalId, setSignalId] = useState("SIG-001");
-  const [signalGps, setSignalGps] = useState<{ lat: number; lng: number }>({ lat: 18.5204, lng: 73.8567 }); // Default Pune center
+  const [signalId, setSignalId] = useState("SIG-MAIN-01");
+  const [signalGps, setSignalGps] = useState<{ lat: number; lng: number }>({ lat: 18.9894, lng: 73.1175 }); // Default: Panvel (simulation area)
   const [isReady, setIsReady] = useState(false);
   
   const [activeAmbulance, setActiveAmbulance] = useState<{ lat: number; lng: number, bearing: number, id: string, distStr: string, etaStr: string } | null>(null);
@@ -79,7 +79,7 @@ export default function SignalDashboard() {
 
     dispatchSocketRef.current = io(`${SOCKET_URL}/dispatch`, { transports: ["websocket", "polling"] });
 
-    dispatchSocketRef.current.on("ambulance:update", (data: AmbulancePosition) => {
+    dispatchSocketRef.current.on("ambulance:position", (data: AmbulancePosition) => {
       const dist = haversineM(signalGps, { lat: data.lat, lng: data.lng });
 
       // Check if ambulance is within proximity radius of the signal

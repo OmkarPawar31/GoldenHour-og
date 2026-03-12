@@ -110,8 +110,8 @@ export function setupDispatchSocket(io: Server) {
       };
       activeAmbulances.set(data.ambulanceId, entry);
 
-      // Broadcast to the ambulance-specific room (operators subscribed)
-      ns.to(`amb:${data.ambulanceId}`).emit("ambulance:position", entry);
+      // Broadcast to the entire dispatch namespace so Signal boards catch it
+      ns.emit("ambulance:position", entry);
     });
 
     socket.on("ambulance:deactivate", (data: { ambulanceId: string }) => {
