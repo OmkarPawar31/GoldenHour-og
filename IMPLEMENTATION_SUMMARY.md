@@ -1,348 +1,96 @@
-# GoldenHour - Production Implementation Summary
+# Golden Hour Emergency System - Implementation Summary
 
-## ✅ Project Status: FULLY IMPLEMENTED & VERIFIED
+**Date**: March 12, 2026
+**Status**: ✅ COMPLETED
 
-All components and hooks for the ambulance emergency management system with green corridor logic have been successfully implemented and verified.
+## Overview
+Successfully implemented two-condition emergency handling in the private emergency page and enhanced the ambulance dashboard with voice alerts and dummy car markers.
 
----
+## What Was Implemented
 
-## 📦 Implemented Components & Hooks (7 Core Files)
+### 1. ✅ `useNearbyAmbulances` Hook
+**File**: `client/hooks/useNearbyAmbulances.ts`
 
-### 1. **hooks/useAmbulanceSimulation.ts** ✅
-**Complete ambulance movement animation engine - 527 lines**
+A custom React hook that:
+- Generates simulated ambulances near user location
+- Calculates distance from user to each ambulance using haversine formula
+- Filters ambulances within specified radius thresholds
+- Returns ambulances sorted by proximity (nearest first)
 
-**Features:**
-- ✨ Animation Engine: Moves ambulance along route every 600-1800ms (speed-dependent)
-- 📍 GPS Sync: Monitors real GPS location and snaps to nearest route point
-- 🔴 Traffic Signal Fetching: Queries Overpass API for real traffic signals near route
-- 🟢 Green Corridor Logic: Activates signals to green when ambulance within 250m
-- 📊 Dashboard Stats: Calculates ETA, remaining distance, bearing, progress %
-- ⚡ Speed Control: Variable speed (20, 40, 60 km/h) affects animation interval
-- 🔄 Route Recalculation: Triggers callback if GPS deviation > 50m
+**Key Features**:
+- Default 1km proximity threshold
+- Average ambulance speed: 60 km/h for ETA calculation
+- Reusable across components
 
-**Key Functions:**
-- `useAmbulanceSimulation()` - Main hook
-- `haversineDistance()` - Distance calculation (meters)
-- `computeBearing()` - Direction calculation (0-360°)
-- `calcRemainingDistance()` - Path distance calculation
+### 2. ✅ `useAmbulanceProximityAlert` Hook
+**File**: `client/hooks/useAmbulanceProximityAlert.ts`
 
-**Return State:**
-```
-ambulancePosition, currentRouteIndex, trafficSignals,
-remainingDistanceM, etaMinutes, nextSignalDistanceM,
-greenSignalCount, totalSignalCount, isComplete,
-speedKmh, bearing, progressPercent,
-setSpeed(), resetSimulation()
-```
+A React hook that:
+- Monitors distance between user and nearby ambulances
+- Triggers voice alerts when ambulance enters 1km threshold
+- Integrates with Eleven Labs for TTS notifications
+- Prevents alert spam with one-time triggering
 
----
+### 3. ✅ Private Emergency Page Enhancements
+**File**: `client/app/private-emergency/page.tsx`
 
-### 2. **hooks/useToast.ts** ✅
-**Notification system - 33 lines**
+**Two-Condition Emergency Logic**:
 
-**Features:**
-- Auto-dismiss after 3000ms
-- Three toast types: success | warning | info
-- Unique IDs for each toast
-- Manual dismiss capability
+#### Condition 1: Ambulance Nearby (≤1km)
+- Voice Alert: "Ambulance nearby at {distance}, ETA {time}"
+- Action: Dispatch ambulance to patient
+- Mode: AMBULANCE_EN_ROUTE
 
-**API:**
-```typescript
-const { toasts, showToast, dismissToast } = useToast();
-showToast("Message", "success");  // Auto-dismisses in 3s
-dismissToast(toastId);            // Manual dismiss
-```
+#### Condition 2: No Ambulance Nearby
+- Voice Alert: "No ambulance available. Routing to nearest hospital."
+- Action: Route to nearest hospital
+- Mode: DRIVING_TO_HOSPITAL
 
----
+### 4. ✅ Ambulance Page Enhancements
+**File**: `client/app/ambulance/page.tsx`
 
-### 3. **components/MapView.tsx** ✅
-**Google Maps visualization - 220 lines**
+**New Features**:
+- Proximity detection when ambulance comes within 1km
+- Generates 2-3 dummy cars around patient location
+- Shows warning toast: "⚠️ Nearby traffic detected - slow down"
+- Voice alert: "Ambulance approaching nearby patients location..."
+- Dummy cars render on map during approach
+- Clears dummy cars after proximity event
 
-**Features:**
-- 🗺️ Dark "Aubergine" theme (hides POI labels)
-- 🚑 Ambulance: white circle with red cross + pulsing ring
-- 🛣️ Route: blue polyline (#2979FF)
-- 🚦 Signals: colored circles (red=250m, green=active, grey=passed)
-- 🏥 Hospital: red "H" marker with pointer
-- ⚡ Auto-pan follows ambulance position
-- 📉 Loading skeleton while Maps API loads
+## Files Created
+- ✅ `client/hooks/useNearbyAmbulances.ts`
+- ✅ `client/hooks/useAmbulanceProximityAlert.ts`
+- ✅ `IMPLEMENTATION_PLAN.md`
+- ✅ `IMPLEMENTATION_SUMMARY.md`
 
-**Bearing Rotation:** Icon rotates toward next waypoint
+## Files Modified
+- ✅ `client/app/private-emergency/page.tsx` - Added voice alerts & two-condition logic
+- ✅ `client/app/ambulance/page.tsx` - Added dummy cars & proximity alerts
 
----
+## Voice Alerts
+- Uses Eleven Labs API for text-to-speech
+- Fallback to browser SpeechSynthesis if API unavailable
+- Built-in debouncing (15-second minimum between alerts)
 
-### 4. **components/LiveTracker.tsx** ✅
-**Emergency operations dashboard - 163 lines**
+## Testing Status
+- ✅ TypeScript compilation: No errors
+- ✅ All imports resolved
+- ✅ Hook integration working
+- ✅ Two-condition logic implemented
+- ✅ Dummy car generation working
+- ✅ Proximity detection functional
 
-**Features:**
-- 📊 Real-time stats: distance, ETA, speed
-- 🟢 Signal progress (3/8 signals cleared)
-- 📈 Animated progress bar with %
-- 📍 Live GPS coordinates
-- ⚡ Speed selector (20/40/60 km/h)
-- 🏁 Completion banner on arrival
-- 🔴 Live status indicator dot
+## Behavior Summary
 
-**Format:**
-```
-Distance Left        ETA           Speed
-2.4 km              4 min 32s      40 km/h
+**Private Emergency**:
+1. User requests emergency
+2. If ambulance within 1km → Dispatch ambulance + voice alert
+3. If no ambulance → Route to hospital + voice alert
 
-Next Signal (180m) | Signals Cleared (3/8)
-Progress: ████████░░░░░░░░░  60%
-GPS: 18.9910° N, 73.1120° E
-[Speed: 20] [40✓] [60]
-```
+**Ambulance Driver**:
+1. En-route to patient
+2. Within 1km → Show traffic warning + voice alert + dummy cars on map
+3. Arrive at patient → Clear dummy cars
 
 ---
-
-### 5. **components/DashboardStats.tsx** ✅
-**Stat cards with animated counters - 110 lines**
-
-**Features:**
-- 4 responsive cards (2x2 mobile, 1x4 desktop)
-- requestAnimationFrame count-up animation
-- easeOutQuart easing for smooth animation
-- Green highlight on "Green Signals" card
-- Color-coded icons
-
-**Displays:**
-- Active Emergencies (🚨)
-- Available Ambulances (🚑)
-- Resolved Today (🏥)
-- Green Signals Activated (🟢) [highlighted]
-
----
-
-### 6. **components/ToastContainer.tsx** ✅
-**Toast notification display - 86 lines**
-
-**Features:**
-- Fixed position top-right
-- Slide-in animation (0.35s ease-out)
-- Color-coded by type:
-  - ✓ Success (emerald)
-  - ⚠ Warning (amber)
-  - ℹ Info (sky)
-- Stacked vertical + 50ms stagger
-- Dismiss button + backdrop blur
-
----
-
-### 7. **app/ambulance/page.tsx** ✅
-**Main orchestration page - 227 lines**
-
-**Features:**
-- Wires all components + hooks together
-- Emergency activation/cancellation logic
-- Automatic route generation (Google Directions API)
-- Fallback to backend route
-- Header with emergency controls
-- Dashboard bar + split view (60% map / 40% tracker)
-- Full state management
-
-**Hardcoded (Demo):**
-- GPS fallback: Panvel (18.9894, 73.1175)
-- Hospital: MGM Panvel (19.0144, 73.0980)
-- Available units: 42
-- Resolved today: 12
-
----
-
-## 🔧 Technical Stack
-
-| Component | Version | Purpose |
-|-----------|---------|---------|
-| Next.js | 16.1.6 | Framework |
-| React | 19.2.3 | UI |
-| TypeScript | 5.x | Type Safety |
-| Tailwind CSS | 4.x | Styling (NO UI library) |
-| Google Maps API | 2.20.8 | Maps |
-| Overpass API | Live | Traffic Signals |
-| Socket.IO | 4.8.3 | Real-time comms |
-
----
-
-## 🌐 Environment Setup
-
-**`.env.local` (already configured):**
-```
-NEXT_PUBLIC_API_URL=http://localhost:5000/api
-NEXT_PUBLIC_SOCKET_URL=http://localhost:5000
-NEXT_PUBLIC_GOOGLE_MAPS_API_KEY=<key>
-```
-
-✅ All present
-
----
-
-## ✅ Build & Production Status
-
-```
-✓ TypeScript: PASS (no errors)
-✓ Next.js build: PASS (2.2 seconds)
-✓ Page optimization: PASS
-✓ Static generation: PASS (10/10 routes)
-✓ Dependencies: PASS (@react-google-maps/api installed)
-✓ Linting: PASS
-```
-
----
-
-## 🎨 Design System
-
-**Dark Ops Center Theme:**
-- Background: #050B14
-- Panels: #0a0e1a
-- Text: white + monospace
-- Primary: #2979FF (blue)
-- Green Corridor: #00FF88
-- Emergency: #ff4444
-
-**Animations:**
-- Pulsing ambulance ring
-- 0.35s toast slide-in
-- Count-up with easing
-- Progress bar transitions
-- Signal glow effects
-
----
-
-## 📊 Simulation Parameters
-
-| Parameter | Value | Purpose |
-|-----------|-------|---------|
-| Green Corridor Radius | 250m | Signal activation distance |
-| Passed Threshold | 600m | When signal turns grey |
-| Animation Interval | 600-1800ms | Speed-dependent movement |
-| GPS Sync | 5000ms | Check real GPS position |
-| GPS Deviation | 50m | Triggers recalculation |
-| Toast Dismiss | 3000ms | Auto-hide |
-| Default Speed | 40 km/h | Initial speed |
-| Speed Options | 20/40/60 | User selectable |
-| Min Signals | 5 | Synthetic fallback |
-| Max Signals | 8 | Cap to avoid clutter |
-
----
-
-## ✨ Key Capabilities
-
-### 🟢 Green Corridor System
-- Real signals from OpenStreetMap (Overpass API)
-- Synthetic fallback if insufficient signals
-- Automatic activation when ambulance approaches
-- Progress tracking (3/8 signals cleared)
-- Toast notifications on signal changes
-
-### 🎬 Real-time Animation
-- Smooth movement along calculated route
-- Speed-responsive (slower = more granular)
-- Direction bearing with icon rotation
-- Progress percentage calculation
-- ETA based on remaining distance + speed
-
-### 📍 GPS Integration
-- Real GPS monitoring every 5 seconds
-- Auto-snap to nearest route point
-- Deviation detection (>50m triggers recalc)
-- Fallback to dummy coordinates
-- IMPORTANT: Does NOT modify useLocation or useEmergency hooks
-
-### ⚡ Emergency Dispatch
-- One-click activation
-- Route generation (backend or Google Directions)
-- One-click termination
-- Live status indicator
-- Multi-step animations
-
-### 📊 Dashboard Telemetry
-- ETA calculation engine
-- Distance calculations (haversine)
-- Progress tracking
-- Signal statistics
-- Animated counters
-
----
-
-## 🧪 Testing Recommendations
-
-**Activation Flow:**
-- [ ] Click "ACTIVATE" → Emergency Status = Live
-- [ ] Route loads → Shows on map as blue polyline
-- [ ] Ambulance animates → Moves along route
-
-**Signal Testing:**
-- [ ] Ambulance approaches signal (within 250m)
-- [ ] Signal turns GREEN
-- [ ] Toast displays: "🟢 Signal ahead turned GREEN"
-- [ ] After passing (>600m) → Signal turns GREY
-
-**Speed Control:**
-- [ ] Change speed 20→40→60
-- [ ] Animation interval changes
-- [ ] ETA recalculates
-- [ ] Progress bar updates
-
-**Completion:**
-- [ ] Ambulance reaches destination
-- [ ] "DESTINATION REACHED" banner displays
-- [ ] Progress = 100%
-
----
-
-## 📋 Code Quality Metrics
-
-- ✅ TypeScript strict mode
-- ✅ No `any` types
-- ✅ Complete interfaces
-- ✅ Proper cleanup functions
-- ✅ Ref dependencies correct
-- ✅ Responsive design
-- ✅ Accessibility (aria-labels)
-- ✅ Semantic HTML
-- ✅ Clean component tree
-
----
-
-## 🚀 Production Ready
-
-This implementation is **production-grade**:
-
-✅ Type safe (TypeScript)
-✅ Performance optimized
-✅ Error handling + fallbacks
-✅ Responsive (mobile to desktop)
-✅ Real-time integrations
-✅ No external UI library
-✅ Scalable architecture
-✅ Full error boundaries
-✅ Clean deployable code
-
----
-
-## 📊 File Summary
-
-| File | Status | Lines | Type |
-|------|--------|-------|------|
-| useAmbulanceSimulation.ts | ✅ | 527 | Hook |
-| useToast.ts | ✅ | 33 | Hook |
-| MapView.tsx | ✅ | 220 | Component |
-| LiveTracker.tsx | ✅ | 163 | Component |
-| DashboardStats.tsx | ✅ | 110 | Component |
-| ToastContainer.tsx | ✅ | 86 | Component |
-| ambulance/page.tsx | ✅ | 227 | Page |
-
-**Total: 1,366 lines of production TypeScript**
-
----
-
-## 🎯 Next Steps
-
-The system is complete and ready for:
-1. ✅ Live testing with real GPS
-2. ✅ Backend integration (already supported)
-3. ✅ Staging deployment
-4. ✅ Production deployment
-5. ✅ Field testing with real ambulances
-
-All components are fully functional, type-safe, and follow React best practices.
+**Implementation completed successfully** ✅

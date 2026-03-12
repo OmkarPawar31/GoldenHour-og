@@ -25,6 +25,40 @@ interface AlertEntry {
   active: boolean;
 }
 
+const TRANSLATIONS = {
+  en: {
+    criticalInstruction: "🚨 EMERGENCY VEHICLE APPROACHING! Move your vehicle to the LEFT side. Clear the RIGHT lane immediately.",
+    privateInstruction: "⚠️ Private emergency vehicle approaching. Please move LEFT and clear the RIGHT lane if possible.",
+    speakCritical: "Attention! Emergency vehicle approaching. Move your vehicle to the left side and clear the right lane immediately.",
+    speakPrivate: "Warning. Private emergency vehicle approaching. Please move left and clear the right lane if possible.",
+    speakProximity: (dist: string) => `Attention driver! Emergency ambulance is ${dist} away from your location and approaching fast. Please move your vehicle to the left side and clear the right lane immediately.`,
+    speakActivate: "Heads up! An emergency ambulance has been dispatched in your area. Please stay alert.",
+    speakSimCritical: "Attention! Emergency ambulance approaching your location. Please move your vehicle to the left side and clear the right lane immediately.",
+    langCode: "en-IN"
+  },
+  mr: {
+    criticalInstruction: "🚨 आपत्कालीन वाहन येत आहे! क्रमांक डावीकडे घ्या आणि उजवी लेन त्वरित रिकामी करा.",
+    privateInstruction: "⚠️ खाजगी आपत्कालीन वाहन येत आहे. कृपया डावीकडे जा आणि उजवी लेन मोकळी करा.",
+    speakCritical: "लक्ष द्या! आपत्कालीन वाहन येत आहे. कृपया आपले वाहन डावीकडे घ्या आणि उजवी लेन त्वरित रिकामी करा.",
+    speakPrivate: "सावधान. खाजगी आपत्कालीन वाहन येत आहे. कृपया डावीकडे जा आणि उजवी लेन मोकळी करा.",
+    speakProximity: (dist: string) => `लक्ष द्या! आपत्कालीन रुग्णवाहिका तुमच्या स्थानापासून ${dist} अंतरावर आहे आणि वेगाने येत आहे. कृपया आपले वाहन डावीकडे घ्या आणि उजवी लेन त्वरित रिकामी करा.`,
+    speakActivate: "सावधान! तुमच्या भागात एक आपत्कालीन रुग्णवाहिका पाठवण्यात आली आहे. कृपया सतर्क राहा.",
+    speakSimCritical: "लक्ष द्या! आपत्कालीन रुग्णवाहिका तुमच्या स्थानाकडे वेगाने येत आहे. कृपया आपले वाहन डावीकडे घ्या आणि उजवी लेन त्वरित रिकामी करा.",
+    langCode: "mr-IN"
+  },
+  hi: {
+    criticalInstruction: "🚨 आपातकालीन वाहन आ रहा है! कृपया अपना वाहन बाईं ओर लें और दाहिनी लेन तुरंत खाली करें।",
+    privateInstruction: "⚠️ निजी आपातकालीन वाहन आ रहा है। कृपया बाईं ओर जाएँ और दाहिनी लेन खाली करें।",
+    speakCritical: "ध्यान दें! आपातकालीन वाहन आ रहा है। कृपया अपना वाहन बाईं ओर लें और दाहिनी लेन तुरंत खाली करें।",
+    speakPrivate: "चेतावनी। निजी आपातकालीन वाहन आ रहा है। कृपया बाईं ओर जाएँ और दाहिनी लेन खाली करें।",
+    speakProximity: (dist: string) => `ध्यान दें! आपातकालीन एम्बुलेंस आपके स्थान से ${dist} दूर है और तेज़ी से आ रही है। कृपया अपना वाहन बाईं ओर लें और दाहिनी लेन तुरंत खाली करें।`,
+    speakActivate: "सावधान! आपके क्षेत्र में एक आपातकालीन एम्बुलेंस भेजी गई है। कृपया सतर्क रहें।",
+    speakSimCritical: "ध्यान दें! आपातकालीन एम्बुलेंस आपके स्थान की ओर आ रही है। कृपया अपना वाहन बाईं ओर लें और दाहिनी लेन तुरंत खाली करें।",
+    langCode: "hi-IN"
+  }
+};
+
+
 interface VehicleInfo {
   plateNumber: string;
   model: string;
@@ -145,11 +179,18 @@ export default function DriverDashboard() {
 
   // Track which ambulances we've already alerted for (cooldown)
   const alertedAmbulancesRef = useRef<Record<string, number>>({});
+  
+  // App Language State
+  const [appLang, setAppLang] = useState<"en" | "mr" | "hi">("en");
+  const appLangRef = useRef<"en" | "mr" | "hi">("en");
 
-  // Keep driverGpsRef in sync
+  // Keep driverGpsRef and appLangRef in sync
   useEffect(() => {
     driverGpsRef.current = driverGps;
   }, [driverGps]);
+  useEffect(() => {
+    appLangRef.current = appLang;
+  }, [appLang]);
 
   /* ── Acquire driver GPS on mount ── */
   useEffect(() => {
@@ -216,6 +257,7 @@ export default function DriverDashboard() {
 
     // Listen for real emergency alerts
     socketRef.current.on("alert", (data: { message: string; sessionId?: string; timestamp: string }) => {
+      const t = TRANSLATIONS[appLangRef.current];
       const newAlert: AlertEntry = {
         id: `alert-${Date.now()}`,
         time: nowStr(),
@@ -224,7 +266,7 @@ export default function DriverDashboard() {
         direction: "Emergency vehicle approaching",
         distance: "< 1km",
         eta: "< 1 min",
-        instruction: data.message,
+        instruction: t.criticalInstruction,
         priority: 100,
         active: true,
       };
@@ -233,8 +275,9 @@ export default function DriverDashboard() {
       setLastAlertTime(nowStr());
       setShowFullAlert(newAlert);
       speakRef.current(
-        "Attention! Emergency ambulance approaching your location. Please move your vehicle to the left side and clear the right lane immediately.",
-        `voice-alert-${newAlert.id}`
+        t.speakCritical,
+        `voice-alert-${newAlert.id}`,
+        t.langCode
       );
       setTimeout(() => {
         setShowFullAlert(prev => prev?.id === newAlert.id ? null : prev);
@@ -243,6 +286,7 @@ export default function DriverDashboard() {
     });
 
     socketRef.current.on("new-emergency", (data: { sessionId: string; priority: string; origin: { lat: number; lng: number } }) => {
+      const t = TRANSLATIONS[appLangRef.current];
       const newAlert: AlertEntry = {
         id: `alert-${Date.now()}`,
         time: nowStr(),
@@ -252,8 +296,8 @@ export default function DriverDashboard() {
         distance: "< 1km",
         eta: "Approaching",
         instruction: data.priority === "critical"
-          ? "🚨 EMERGENCY VEHICLE APPROACHING! Move your vehicle to the LEFT side. Clear the RIGHT lane immediately."
-          : "⚠️ Private emergency vehicle approaching. Please move LEFT and clear the RIGHT lane if possible.",
+          ? t.criticalInstruction
+          : t.privateInstruction,
         priority: data.priority === "critical" ? 100 : 70,
         active: true,
       };
@@ -263,9 +307,10 @@ export default function DriverDashboard() {
       setShowFullAlert(newAlert);
       speakRef.current(
         data.priority === "critical"
-          ? "Attention! Emergency vehicle approaching. Move your vehicle to the left side and clear the right lane immediately."
-          : "Warning. Private emergency vehicle approaching. Please move left and clear the right lane if possible.",
-        `voice-emergency-${newAlert.id}`
+          ? t.speakCritical
+          : t.speakPrivate,
+        `voice-emergency-${newAlert.id}`,
+        t.langCode
       );
       setTimeout(() => {
         setShowFullAlert(prev => prev?.id === newAlert.id ? null : prev);
@@ -314,6 +359,7 @@ export default function DriverDashboard() {
 
         const distStr = dist >= 1000 ? `${(dist / 1000).toFixed(1)}km` : `${Math.round(dist)}m`;
         const etaStr = data.speed > 0 ? `~${Math.ceil((dist / 1000) / data.speed * 60)}min` : "< 1 min";
+        const t = TRANSLATIONS[appLangRef.current];
 
         const newAlert: AlertEntry = {
           id: `proximity-${Date.now()}`,
@@ -323,7 +369,7 @@ export default function DriverDashboard() {
           direction: `Emergency ambulance approaching — ${distStr} away`,
           distance: distStr,
           eta: etaStr,
-          instruction: "🚨 EMERGENCY AMBULANCE NEARBY! Move your vehicle to the LEFT side. Clear the RIGHT lane immediately.",
+          instruction: t.criticalInstruction,
           priority: 100,
           active: true,
         };
@@ -333,10 +379,11 @@ export default function DriverDashboard() {
         setLastAlertTime(nowStr());
         setShowFullAlert(newAlert);
 
-        // Voice alert via ElevenLabs
+        // Voice alert via Native TTS
         speakRef.current(
-          `Attention driver! Emergency ambulance is ${distStr} away from your location and approaching fast. Please move your vehicle to the left side and clear the right lane immediately.`,
-          `voice-proximity-${data.ambulanceId}`
+          t.speakProximity(distStr),
+          `voice-proximity-${data.ambulanceId}`,
+          t.langCode
         );
 
         console.log(`[Driver] 🚨 Ambulance ${data.ambulanceId} is ${distStr} away — ALERT triggered!`);
@@ -357,6 +404,7 @@ export default function DriverDashboard() {
       if (dist <= PROXIMITY_ALERT_RADIUS_M * 2) {
         // Ambulance activated nearby — pre-warn driver
         const distStr = dist >= 1000 ? `${(dist / 1000).toFixed(1)}km` : `${Math.round(dist)}m`;
+        const t = TRANSLATIONS[appLangRef.current];
         const newAlert: AlertEntry = {
           id: `activate-${Date.now()}`,
           time: nowStr(),
@@ -365,7 +413,7 @@ export default function DriverDashboard() {
           direction: `Emergency activated ${distStr} away — ambulance dispatched`,
           distance: distStr,
           eta: "Approaching",
-          instruction: "🚑 Emergency ambulance has been dispatched near your area. Stay alert and be ready to move aside.",
+          instruction: t.speakActivate,
           priority: 80,
           active: true,
         };
@@ -374,8 +422,9 @@ export default function DriverDashboard() {
         setLastAlertTime(nowStr());
 
         speakRef.current(
-          "Heads up! An emergency ambulance has been dispatched in your area. Please stay alert.",
-          `voice-activate-${data.ambulanceId}`
+          t.speakActivate,
+          `voice-activate-${data.ambulanceId}`,
+          t.langCode
         );
 
         // Store the route to show on the map
@@ -403,8 +452,10 @@ export default function DriverDashboard() {
 
     simulateRef.current = setInterval(() => {
       const template = ALERT_TEMPLATES[Math.floor(Math.random() * ALERT_TEMPLATES.length)];
+      const t = TRANSLATIONS[appLangRef.current];
       const newAlert: AlertEntry = {
         ...template,
+        instruction: template.type === "ambulance" ? t.criticalInstruction : t.privateInstruction,
         id: `alert-${Date.now()}`,
         time: nowStr(),
         distance: `${(0.3 + Math.random() * 1.2).toFixed(1)}km`,
@@ -417,12 +468,13 @@ export default function DriverDashboard() {
       setLastAlertTime(nowStr());
       setShowFullAlert(newAlert);
 
-      // Voice alert via ElevenLabs
+      // Voice alert via Native TTS
       speakRef.current(
         newAlert.type === "ambulance"
-          ? "Attention! Emergency ambulance approaching your location. Please move your vehicle to the left side and clear the right lane immediately."
-          : "Warning. Private emergency vehicle approaching. Please move left and clear the right lane if possible.",
-        `voice-sim-${newAlert.id}`
+          ? t.speakSimCritical
+          : t.speakPrivate,
+        `voice-sim-${newAlert.id}`,
+        t.langCode
       );
 
       setTimeout(() => {
@@ -898,6 +950,19 @@ export default function DriverDashboard() {
           )}
         </div>
         <div className="tb-right">
+          <select 
+            value={appLang} 
+            onChange={(e) => setAppLang(e.target.value as "en" | "hi" | "mr")}
+            style={{
+              padding: "0.2rem 0.6rem", borderRadius: "5px", background: "rgba(255,255,255,0.1)", color: "#1E293B",
+              fontFamily: "'DM Sans', sans-serif", fontSize: "0.8rem", border: "1px solid rgba(0,0,0,0.1)",
+              outline: "none", cursor: "pointer", marginRight: "0.5rem"
+            }}
+          >
+            <option value="en">English</option>
+            <option value="mr">मराठी</option>
+            <option value="hi">हिंदी</option>
+          </select>
           <div className={`sp ${connected ? "connected" : "offline"}`}>
             <div className={`sp-dot ${connected ? "on" : "off"}`} />
             {connected ? "LISTENING" : "OFFLINE"}

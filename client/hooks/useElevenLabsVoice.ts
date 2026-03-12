@@ -1,15 +1,32 @@
 // hooks/useElevenLabsVoice.ts
 "use client";
 
-import { useRef, useCallback } from "react";
+import { useRef, useCallback, useEffect } from "react";
 
 const DEBOUNCE_MS = 15_000; // Don't replay the same alert within 15s
 
 export function useElevenLabsVoice() {
   const lastPlayedRef = useRef<Record<string, number>>({});
-  const audioRef = useRef<HTMLAudioElement | null>(null);
+  const voicesRef = useRef<SpeechSynthesisVoice[]>([]);
 
-  const speak = useCallback(async (text: string, alertKey?: string) => {
+  // Pre-load voices so we can choose a good one
+  useEffect(() => {
+    const loadVoices = () => {
+      const availableVoices = window.speechSynthesis.getVoices();
+      if (availableVoices.length > 0) {
+        voicesRef.current = availableVoices;
+      }
+    };
+
+    if (typeof window !== "undefined" && window.speechSynthesis) {
+      loadVoices();
+      window.speechSynthesis.onvoiceschanged = loadVoices;
+    }
+  }, []);
+
+  const speak = useCallback((text: string, alertKey?: string, lang: string = "en-IN") => {
+    if (typeof window === "undefined" || !window.speechSynthesis) return;
+
     const key = alertKey || text;
     const now = Date.now();
 
@@ -22,55 +39,37 @@ export function useElevenLabsVoice() {
     lastPlayedRef.current[key] = now;
 
     try {
-      const response = await fetch("/api/tts", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ text }),
-      });
+      // Cancel any currently playing speech to avoid overlap
+      window.speechSynthesis.cancel();
 
-      if (!response.ok) {
-        console.error("[Voice] TTS API returned", response.status);
-        // Fallback to browser TTS
-        fallbackSpeak(text);
-        return;
+      const utterance = new SpeechSynthesisUtterance(text);
+      utterance.lang = lang; // Explicitly set to requested language
+      
+      // Try to select an appropriate voice based on requested language
+      if (voicesRef.current.length > 0) {
+        const preferredVoice = voicesRef.current.find(
+          (voice) => 
+            (voice.lang === lang || voice.lang.startsWith(lang.split('-')[0])) &&
+            (voice.name.includes("Google") || voice.name.includes("Natural")) &&
+            !voice.localService
+        ) || voicesRef.current.find(v => v.lang.startsWith(lang.split('-')[0]));
+        
+        if (preferredVoice) {
+          utterance.voice = preferredVoice;
+        }
       }
 
-      const audioBlob = await response.blob();
-      const audioUrl = URL.createObjectURL(audioBlob);
+      utterance.rate = 1.0;  // Normal speed
+      utterance.pitch = 1.0; // Normal pitch
+      utterance.volume = 1.0;
 
-      // Stop any currently playing audio
-      if (audioRef.current) {
-        audioRef.current.pause();
-        audioRef.current = null;
-      }
+      window.speechSynthesis.speak(utterance);
+      console.log("[Voice] Playing native TTS for:", text);
 
-      const audio = new Audio(audioUrl);
-      audioRef.current = audio;
-      audio.volume = 1.0;
-
-      audio.onended = () => {
-        URL.revokeObjectURL(audioUrl);
-        audioRef.current = null;
-      };
-
-      await audio.play();
-      console.log("[Voice] Playing ElevenLabs TTS for:", text);
     } catch (err) {
       console.error("[Voice] Failed to play TTS:", err);
-      fallbackSpeak(text);
     }
   }, []);
 
   return { speak };
-}
-
-/** Browser-native SpeechSynthesis fallback */
-function fallbackSpeak(text: string) {
-  if (typeof window === "undefined" || !window.speechSynthesis) return;
-  const utterance = new SpeechSynthesisUtterance(text);
-  utterance.rate = 1.0;
-  utterance.pitch = 1.0;
-  utterance.volume = 1.0;
-  window.speechSynthesis.speak(utterance);
-  console.log("[Voice] Using browser fallback TTS");
 }
