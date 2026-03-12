@@ -1,0 +1,42 @@
+# dependencies
+node_modules/
+.pnp
+.pnp.js
+
+# build
+.next/
+out/
+build/
+
+# misc
+.DS_Store
+*.pem
+
+# debug
+npm-debug.log*
+
+# env
+.env*.local
+.env
+
+# typescript
+*.tsbuildinfo
+next-env.d.ts
+
+# PWA auto-generated files
+public/sw.js
+public/sw.js.map
+public/workbox-*.js
+public/workbox-*.js.map
+public/swe-worker-*.js
+public/fallback-*.js
+
+# temp/debug files
+ts_errors.txt
+tsc-errors.txt
+tsc_check.txt
+lint-out.txt
+lint-results.json
+lint_errors.txt
+typescript_errors.log
+eslint.json

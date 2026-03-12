@@ -240,7 +240,7 @@ export default function HospitalDashboard() {
     }, []);
 
     const inboundAmbulances = useMemo(() => {
-        if (!window.google?.maps?.geometry) return tracking.activeAmbulances;
+        if (typeof window === "undefined" || !window.google?.maps?.geometry) return tracking.activeAmbulances;
         return tracking.activeAmbulances.filter(a => {
             if (!a.destination) return false;
             // Name match or within 1.5km
