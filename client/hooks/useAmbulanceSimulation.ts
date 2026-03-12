@@ -18,6 +18,13 @@ export interface TrafficSignal {
     status: "red" | "green" | "passed";
 }
 
+export interface DummyCar {
+    id: string;
+    lat: number;
+    lng: number;
+    alerted: boolean;
+}
+
 export interface SimulationState {
     ambulancePosition: LatLng | null;
     currentRouteIndex: number;
@@ -40,6 +47,7 @@ export interface UseAmbulanceSimulationProps {
     onToast?: (message: string, type: "success" | "warning" | "info") => void;
     onRecalculate?: (lat: number, lng: number) => void;
     onLegComplete?: () => void;
+    onDummyCarAlert?: (car: DummyCar) => void;
 }
 
 /* ─────────────────────────────────────────
@@ -52,6 +60,7 @@ const MAP_DEVIATE_THRESHOLD_M = 50;
 const SIGNAL_FETCH_RADIUS_M = 600;
 const DEFAULT_SPEED_KMH = 40;
 const OVERPASS_URL = "https://overpass-api.de/api/interpreter";
+const DUMMY_CAR_ALERT_RADIUS_M = 300;
 
 /* ─────────────────────────────────────────
    MATH UTILITIES
@@ -97,6 +106,7 @@ export function useAmbulanceSimulation({
     onToast,
     onRecalculate,
     onLegComplete,
+    onDummyCarAlert,
 }: UseAmbulanceSimulationProps) {
     /* ── State ── */
     const [ambulancePosition, setAmbulancePosition] = useState<LatLng | null>(null);
@@ -110,6 +120,7 @@ export function useAmbulanceSimulation({
     const [progressPercent, setProgressPercent] = useState(0);
     const [bearing, setBearing] = useState(0);
     const [currentRouteIndex, setCurrentRouteIndex] = useState(0);
+    const [dummyCars, setDummyCars] = useState<DummyCar[]>([]);
 
     /* ── Refs ── */
     const currentIndexRef = useRef(0);
@@ -120,6 +131,8 @@ export function useAmbulanceSimulation({
     const speedRef = useRef(DEFAULT_SPEED_KMH);
     const isActiveRef = useRef(false);
     const signalsFetchedRef = useRef(false);
+    const dummyCarsRef = useRef<DummyCar[]>([]);
+    const dummyCarsPlacedRef = useRef(false);
 
     /* Keep refs in sync */
     useEffect(() => {
@@ -147,6 +160,9 @@ export function useAmbulanceSimulation({
         setProgressPercent(0);
         setGreenSignalCount(0);
         signalsFetchedRef.current = false;
+        dummyCarsPlacedRef.current = false;
+        dummyCarsRef.current = [];
+        setDummyCars([]);
 
         // Reset all signal statuses
         setTrafficSignals((prev) => {
@@ -253,6 +269,49 @@ export function useAmbulanceSimulation({
         [onToast]
     );
 
+    /* ── Place dummy cars on route ── */
+    const placeDummyCars = useCallback(
+        (points: LatLng[]) => {
+            if (points.length < 10) return;
+            // Place one dummy car at ~35% along the route
+            const idx = Math.floor(points.length * 0.35);
+            const car: DummyCar = {
+                id: `dummy-car-1`,
+                lat: points[idx].lat,
+                lng: points[idx].lng,
+                alerted: false,
+            };
+            dummyCarsRef.current = [car];
+            setDummyCars([car]);
+            console.log(`[DummyCar] Placed dummy car at route index ${idx}`);
+        },
+        []
+    );
+
+    /* ── Check dummy car proximity ── */
+    const checkDummyCarProximity = useCallback(
+        (position: LatLng) => {
+            let changed = false;
+            const updated = dummyCarsRef.current.map((car) => {
+                if (car.alerted) return car;
+                const dist = haversineDistance(position, { lat: car.lat, lng: car.lng });
+                if (dist <= DUMMY_CAR_ALERT_RADIUS_M) {
+                    changed = true;
+                    onToast?.(`⚠️ Vehicle ahead! Move aside — ambulance approaching (${Math.round(dist)}m)`, "warning");
+                    console.log(`[DummyCar] Alert triggered for ${car.id} at ${Math.round(dist)}m`);
+                    onDummyCarAlert?.(car);
+                    return { ...car, alerted: true };
+                }
+                return car;
+            });
+            if (changed) {
+                dummyCarsRef.current = updated;
+                setDummyCars([...updated]);
+            }
+        },
+        [onToast, onDummyCarAlert]
+    );
+
     /* ── Green corridor check ── */
     const checkSignalProximity = useCallback(
         (position: LatLng) => {
@@ -344,6 +403,12 @@ export function useAmbulanceSimulation({
             fetchSignals(routePoints);
         }
 
+        // Place dummy cars if not yet done
+        if (!dummyCarsPlacedRef.current) {
+            dummyCarsPlacedRef.current = true;
+            placeDummyCars(routePoints);
+        }
+
         // Start animation
         const startAnimation = () => {
             if (animIntervalRef.current) clearInterval(animIntervalRef.current);
@@ -390,6 +455,9 @@ export function useAmbulanceSimulation({
                 // Check signal proximity
                 checkSignalProximity(pos);
 
+                // Check dummy car proximity
+                checkDummyCarProximity(pos);
+
                 // Update stats
                 updateStats(idx, points);
             }, getAnimIntervalMs());
@@ -408,6 +476,8 @@ export function useAmbulanceSimulation({
         routePoints,
         fetchSignals,
         checkSignalProximity,
+        checkDummyCarProximity,
+        placeDummyCars,
         updateStats,
         getAnimIntervalMs,
         onLegComplete,
@@ -453,6 +523,7 @@ export function useAmbulanceSimulation({
             setAmbulancePosition(pos);
             setBearing(computeBearing(pos, nextPos));
             checkSignalProximity(pos);
+            checkDummyCarProximity(pos);
             updateStats(idx, points);
         }, getAnimIntervalMs());
 
@@ -525,6 +596,7 @@ export function useAmbulanceSimulation({
         ambulancePosition,
         currentRouteIndex,
         trafficSignals,
+        dummyCars,
         remainingDistanceM,
         etaMinutes,
         nextSignalDistanceM,

@@ -2,7 +2,12 @@
 
 import { useState, useEffect, useRef, useCallback } from "react";
 import Link from "next/link";
+import dynamic from "next/dynamic";
 import { io, Socket } from "socket.io-client";
+import { useElevenLabsVoice } from "../../hooks/useElevenLabsVoice";
+import { useJsApiLoader } from "@react-google-maps/api";
+
+const MapView = dynamic(() => import("../../components/MapView"), { ssr: false });
 
 /* ─────────────────────────────────────────────────────────
    TYPES
@@ -27,14 +32,42 @@ interface VehicleInfo {
   fuelType: string;
 }
 
+interface AmbulancePosition {
+  ambulanceId: string;
+  lat: number;
+  lng: number;
+  bearing: number;
+  speed: number;
+  eta: number;
+  remainingM: number;
+  currentLeg?: string;
+  routePoints?: { lat: number; lng: number }[];
+}
+
 function nowStr() {
   return new Date().toLocaleTimeString("en-IN", {
     hour: "2-digit", minute: "2-digit", second: "2-digit",
   });
 }
 
+/* ── Haversine distance in meters ── */
+function haversineM(p1: { lat: number; lng: number }, p2: { lat: number; lng: number }): number {
+  const R = 6371000;
+  const dLat = ((p2.lat - p1.lat) * Math.PI) / 180;
+  const dLng = ((p2.lng - p1.lng) * Math.PI) / 180;
+  const a =
+    Math.sin(dLat / 2) ** 2 +
+    Math.cos((p1.lat * Math.PI) / 180) *
+    Math.cos((p2.lat * Math.PI) / 180) *
+    Math.sin(dLng / 2) ** 2;
+  return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+}
+
+const PROXIMITY_ALERT_RADIUS_M = 800; // Alert when ambulance is within 800m
+const ALERT_COOLDOWN_MS = 15000; // Don't re-alert for same ambulance within 15s
+
 /* ─────────────────────────────────────────────────────────
-   SIMULATED ALERTS
+   SIMULATED ALERTS (fallback for demo)
 ───────────────────────────────────────────────────────── */
 const ALERT_TEMPLATES: Omit<AlertEntry, "id" | "time" | "active">[] = [
   {
@@ -90,6 +123,67 @@ export default function DriverDashboard() {
   const simulateRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const alertListRef = useRef<HTMLDivElement>(null);
   const socketRef = useRef<Socket | null>(null);
+  const dispatchSocketRef = useRef<Socket | null>(null);
+  const { speak } = useElevenLabsVoice();
+  const speakRef = useRef(speak);
+  speakRef.current = speak;
+
+  // GPS state for driver's location
+  const [driverGps, setDriverGps] = useState<{ lat: number; lng: number } | null>(null);
+  const driverGpsRef = useRef<{ lat: number; lng: number } | null>(null);
+  const gpsWatchIdRef = useRef<number | null>(null);
+  const [gpsStatus, setGpsStatus] = useState<"acquiring" | "live" | "error">("acquiring");
+
+  const [activeAmbulance, setActiveAmbulance] = useState<{ lat: number; lng: number, bearing: number } | null>(null);
+  const [activeAmbulanceRoute, setActiveAmbulanceRoute] = useState<{ lat: number; lng: number }[]>([]);
+
+  const { isLoaded: isMapLoaded } = useJsApiLoader({
+    id: 'google-map-script',
+    googleMapsApiKey: process.env.NEXT_PUBLIC_GOOGLE_MAPS_API_KEY || "",
+  });
+
+  // Track which ambulances we've already alerted for (cooldown)
+  const alertedAmbulancesRef = useRef<Record<string, number>>({});
+
+  // Keep driverGpsRef in sync
+  useEffect(() => {
+    driverGpsRef.current = driverGps;
+  }, [driverGps]);
+
+  /* ── Acquire driver GPS on mount ── */
+  useEffect(() => {
+    if (!navigator.geolocation) {
+      setGpsStatus("error");
+      // Fallback GPS for demo (Panvel area)
+      const fallback = { lat: 18.9894, lng: 73.1175 };
+      setDriverGps(fallback);
+      driverGpsRef.current = fallback;
+      return;
+    }
+
+    gpsWatchIdRef.current = navigator.geolocation.watchPosition(
+      (pos) => {
+        const loc = { lat: pos.coords.latitude, lng: pos.coords.longitude };
+        setDriverGps(loc);
+        driverGpsRef.current = loc;
+        setGpsStatus("live");
+      },
+      () => {
+        setGpsStatus("error");
+        // Fallback GPS for demo
+        const fallback = { lat: 18.9894, lng: 73.1175 };
+        setDriverGps(fallback);
+        driverGpsRef.current = fallback;
+      },
+      { enableHighAccuracy: true, maximumAge: 5000, timeout: 10000 }
+    );
+
+    return () => {
+      if (gpsWatchIdRef.current !== null) {
+        navigator.geolocation.clearWatch(gpsWatchIdRef.current);
+      }
+    };
+  }, []);
 
   /* auto-scroll alerts */
   useEffect(() => {
@@ -108,7 +202,7 @@ export default function DriverDashboard() {
 
     const SOCKET_URL = process.env.NEXT_PUBLIC_SOCKET_URL || "http://localhost:5000";
 
-    // Connect to real emergency socket
+    // ─── 1. Connect to /emergency namespace (existing alerts) ───
     socketRef.current = io(`${SOCKET_URL}/emergency`, { transports: ["websocket", "polling"] });
 
     socketRef.current.on("connect", () => {
@@ -137,6 +231,10 @@ export default function DriverDashboard() {
       setAlertCount(c => c + 1);
       setLastAlertTime(nowStr());
       setShowFullAlert(newAlert);
+      speakRef.current(
+        "Attention! Emergency ambulance approaching your location. Please move your vehicle to the left side and clear the right lane immediately.",
+        `voice-alert-${newAlert.id}`
+      );
       setTimeout(() => {
         setShowFullAlert(prev => prev?.id === newAlert.id ? null : prev);
         setAlerts(prev => prev.map(a => a.id === newAlert.id ? { ...a, active: false } : a));
@@ -162,6 +260,12 @@ export default function DriverDashboard() {
       setAlertCount(c => c + 1);
       setLastAlertTime(nowStr());
       setShowFullAlert(newAlert);
+      speakRef.current(
+        data.priority === "critical"
+          ? "Attention! Emergency vehicle approaching. Move your vehicle to the left side and clear the right lane immediately."
+          : "Warning. Private emergency vehicle approaching. Please move left and clear the right lane if possible.",
+        `voice-emergency-${newAlert.id}`
+      );
       setTimeout(() => {
         setShowFullAlert(prev => prev?.id === newAlert.id ? null : prev);
         setAlerts(prev => prev.map(a => a.id === newAlert.id ? { ...a, active: false } : a));
@@ -178,7 +282,118 @@ export default function DriverDashboard() {
       ));
     });
 
-    // Also keep simulation fallback for demo/offline mode
+    // ─── 2. Connect to /dispatch namespace (ambulance position broadcasts) ───
+    dispatchSocketRef.current = io(`${SOCKET_URL}/dispatch`, { transports: ["websocket", "polling"] });
+
+    dispatchSocketRef.current.on("connect", () => {
+      console.log("[Driver] Connected to /dispatch for ambulance proximity tracking");
+    });
+
+    // Listen for live ambulance position updates
+    dispatchSocketRef.current.on("ambulance:update", (data: AmbulancePosition) => {
+      // Keep track of ambulance position for map rendering
+      setActiveAmbulance({ lat: data.lat, lng: data.lng, bearing: data.bearing });
+      if (data.routePoints) {
+        setActiveAmbulanceRoute(data.routePoints);
+      }
+
+      const myPos = driverGpsRef.current;
+      if (!myPos) return;
+
+      const dist = haversineM(myPos, { lat: data.lat, lng: data.lng });
+
+      // Check if ambulance is within proximity radius
+      if (dist <= PROXIMITY_ALERT_RADIUS_M) {
+        const now = Date.now();
+        const lastAlerted = alertedAmbulancesRef.current[data.ambulanceId] || 0;
+
+        // Cooldown: don't re-alert for same ambulance within 15s
+        if (now - lastAlerted < ALERT_COOLDOWN_MS) return;
+        alertedAmbulancesRef.current[data.ambulanceId] = now;
+
+        const distStr = dist >= 1000 ? `${(dist / 1000).toFixed(1)}km` : `${Math.round(dist)}m`;
+        const etaStr = data.speed > 0 ? `~${Math.ceil((dist / 1000) / data.speed * 60)}min` : "< 1 min";
+
+        const newAlert: AlertEntry = {
+          id: `proximity-${Date.now()}`,
+          time: nowStr(),
+          vehicleId: data.ambulanceId,
+          type: "ambulance",
+          direction: `Emergency ambulance approaching — ${distStr} away`,
+          distance: distStr,
+          eta: etaStr,
+          instruction: "🚨 EMERGENCY AMBULANCE NEARBY! Move your vehicle to the LEFT side. Clear the RIGHT lane immediately.",
+          priority: 100,
+          active: true,
+        };
+
+        setAlerts(prev => [newAlert, ...prev.slice(0, 19)]);
+        setAlertCount(c => c + 1);
+        setLastAlertTime(nowStr());
+        setShowFullAlert(newAlert);
+
+        // Voice alert via ElevenLabs
+        speakRef.current(
+          `Attention driver! Emergency ambulance is ${distStr} away from your location and approaching fast. Please move your vehicle to the left side and clear the right lane immediately.`,
+          `voice-proximity-${data.ambulanceId}`
+        );
+
+        console.log(`[Driver] 🚨 Ambulance ${data.ambulanceId} is ${distStr} away — ALERT triggered!`);
+
+        setTimeout(() => {
+          setShowFullAlert(prev => prev?.id === newAlert.id ? null : prev);
+          setAlerts(prev => prev.map(a => a.id === newAlert.id ? { ...a, active: false } : a));
+        }, 10000);
+      }
+    });
+
+    // Listen for ambulance activation
+    dispatchSocketRef.current.on("ambulance:activate", (data: { ambulanceId: string; lat: number; lng: number, routePoints?: { lat: number, lng: number }[] }) => {
+      const myPos = driverGpsRef.current;
+      if (!myPos) return;
+
+      const dist = haversineM(myPos, { lat: data.lat, lng: data.lng });
+      if (dist <= PROXIMITY_ALERT_RADIUS_M * 2) {
+        // Ambulance activated nearby — pre-warn driver
+        const distStr = dist >= 1000 ? `${(dist / 1000).toFixed(1)}km` : `${Math.round(dist)}m`;
+        const newAlert: AlertEntry = {
+          id: `activate-${Date.now()}`,
+          time: nowStr(),
+          vehicleId: data.ambulanceId,
+          type: "ambulance",
+          direction: `Emergency activated ${distStr} away — ambulance dispatched`,
+          distance: distStr,
+          eta: "Approaching",
+          instruction: "🚑 Emergency ambulance has been dispatched near your area. Stay alert and be ready to move aside.",
+          priority: 80,
+          active: true,
+        };
+        setAlerts(prev => [newAlert, ...prev.slice(0, 19)]);
+        setAlertCount(c => c + 1);
+        setLastAlertTime(nowStr());
+
+        speakRef.current(
+          "Heads up! An emergency ambulance has been dispatched in your area. Please stay alert.",
+          `voice-activate-${data.ambulanceId}`
+        );
+
+        // Store the route to show on the map
+        if (data.routePoints) {
+          setActiveAmbulanceRoute(data.routePoints);
+        }
+
+        setTimeout(() => {
+          setAlerts(prev => prev.map(a => a.id === newAlert.id ? { ...a, active: false } : a));
+        }, 10000);
+      }
+    });
+
+    dispatchSocketRef.current.on("ambulance:deactivate", () => {
+      setActiveAmbulance(null);
+      setActiveAmbulanceRoute([]);
+    });
+
+    // ─── 3. Simulation fallback for demo/offline mode ───
     setTimeout(() => {
       if (!socketRef.current?.connected) {
         setConnected(true); // simulate connected for demo
@@ -201,6 +416,14 @@ export default function DriverDashboard() {
       setLastAlertTime(nowStr());
       setShowFullAlert(newAlert);
 
+      // Voice alert via ElevenLabs
+      speakRef.current(
+        newAlert.type === "ambulance"
+          ? "Attention! Emergency ambulance approaching your location. Please move your vehicle to the left side and clear the right lane immediately."
+          : "Warning. Private emergency vehicle approaching. Please move left and clear the right lane if possible.",
+        `voice-sim-${newAlert.id}`
+      );
+
       setTimeout(() => {
         setShowFullAlert(prev => prev?.id === newAlert.id ? null : prev);
         setAlerts(prev => prev.map(a => a.id === newAlert.id ? { ...a, active: false } : a));
@@ -215,12 +438,15 @@ export default function DriverDashboard() {
     if (simulateRef.current) clearInterval(simulateRef.current);
     socketRef.current?.disconnect();
     socketRef.current = null;
+    dispatchSocketRef.current?.disconnect();
+    dispatchSocketRef.current = null;
   }, []);
 
   /* cleanup on unmount */
   useEffect(() => () => {
     if (simulateRef.current) clearInterval(simulateRef.current);
     socketRef.current?.disconnect();
+    dispatchSocketRef.current?.disconnect();
   }, []);
 
   /* ──────────────────────────────────────────────────────
@@ -425,8 +651,15 @@ export default function DriverDashboard() {
 
         /* ── MAIN AREA ── */
         .main-area {
-          display: flex; flex-direction: column; overflow: hidden;
+          display: flex; flex-direction: row; overflow: hidden;
           background: #F8FAFC;
+        }
+        .main-col-left {
+          flex: 1; display: flex; flex-direction: column; overflow: hidden;
+          border-right: 1px solid var(--border);
+        }
+        .main-col-right {
+          flex: 1.5; position: relative;
         }
 
         /* ── FULL-SCREEN ALERT OVERLAY ── */
@@ -668,6 +901,12 @@ export default function DriverDashboard() {
             <div className={`sp-dot ${connected ? "on" : "off"}`} />
             {connected ? "LISTENING" : "OFFLINE"}
           </div>
+          {driverGps && (
+            <div className="sp connected" style={{ gap: "0.3rem" }}>
+              <div className="sp-dot on" style={{ background: gpsStatus === "live" ? "#34D399" : "#F59E0B" }} />
+              GPS {gpsStatus === "live" ? "LIVE" : gpsStatus === "error" ? "DEMO" : "..."}
+            </div>
+          )}
           <Link href="/auth" className="exit-btn">← Exit</Link>
         </div>
       </header>
@@ -849,75 +1088,94 @@ export default function DriverDashboard() {
           </div>
         </aside>
 
-        {/* ── MAIN AREA: ALERT FEED ── */}
+        {/* ── MAIN AREA: SPLIT (ALERTS + MAP) ── */}
         <div className="main-area">
-          <div className="alert-header">
-            <div>
-              <div className="alert-header-title">Alert <span>Feed</span></div>
-              <div className="alert-header-sub">
-                {connected
-                  ? `Listening for corridor alerts within 1km · ${alertCount} received`
-                  : "Not connected — start listening to receive alerts"}
+          <div className="main-col-left">
+            <div className="alert-header">
+              <div>
+                <div className="alert-header-title">Alert <span>Feed</span></div>
+                <div className="alert-header-sub">
+                  {connected
+                    ? `Listening for corridor alerts within 1km · ${alertCount} received`
+                    : "Not connected — start listening to receive alerts"}
+                </div>
               </div>
+              {connected && (
+                <div style={{
+                  display: "flex", alignItems: "center", gap: "0.5rem",
+                  fontFamily: "'JetBrains Mono', monospace", fontSize: "0.62rem", color: "#34D399"
+                }}>
+                  <div className="spinner" style={{ width: 12, height: 12, borderWidth: 2, borderColor: "#34D399", borderTopColor: "transparent" }} />
+                  MONITORING
+                </div>
+              )}
             </div>
-            {connected && (
-              <div style={{
-                display: "flex", alignItems: "center", gap: "0.5rem",
-                fontFamily: "'JetBrains Mono', monospace", fontSize: "0.62rem", color: "#34D399"
-              }}>
-                <div className="spinner" style={{ width: 12, height: 12, borderWidth: 2, borderColor: "#34D399", borderTopColor: "transparent" }} />
-                MONITORING
-              </div>
-            )}
+
+            <div className="alert-list-wrap" ref={alertListRef}>
+              {alerts.length === 0 ? (
+                <div className="alert-empty">
+                  <div className="alert-empty-pulse">
+                    <div className="pulse-ring" />
+                    <div className="pulse-ring" />
+                    <div className="pulse-ring" />
+                    <div className="pulse-center" />
+                  </div>
+                  <div className="alert-empty-icon">📡</div>
+                  <div className="alert-empty-title">
+                    {connected ? "Listening for Alerts…" : "No Alerts Yet"}
+                  </div>
+                  <div className="alert-empty-sub">
+                    {connected
+                      ? "You are connected to the corridor network. When an emergency vehicle is nearby, you'll receive an immediate alert here."
+                      : "Save your vehicle info and start listening to receive real-time emergency corridor alerts."}
+                  </div>
+                </div>
+              ) : (
+                alerts.map((a) => (
+                  <div key={a.id} className={`al-item ${a.active ? "active" : ""} ${a.type}`}>
+                    <div className="al-top">
+                      <div className="al-top-left">
+                        <span className="al-icon">{a.type === "ambulance" ? "🚑" : "🚗"}</span>
+                        <span className="al-vid" style={{ color: a.type === "ambulance" ? "var(--danger)" : "var(--amber)" }}>
+                          {a.vehicleId}
+                        </span>
+                        <span className={`al-pri ${a.type}`}>P-{a.priority}</span>
+                      </div>
+                      <div style={{ display: "flex", alignItems: "center", gap: "0.6rem" }}>
+                        <span className={`al-active-badge ${a.active ? "is-active" : "dismissed"}`}>
+                          {a.active ? "● ACTIVE" : "CLEARED"}
+                        </span>
+                        <span className="al-time">{a.time}</span>
+                      </div>
+                    </div>
+                    <div className={`al-instruction ${a.type}`}>
+                      {a.instruction}
+                    </div>
+                    <div className="al-meta">
+                      <div className="al-meta-item">📍 {a.direction}</div>
+                      <div className="al-meta-item">↔ {a.distance}</div>
+                      <div className="al-meta-item">⏱ ETA {a.eta}</div>
+                    </div>
+                  </div>
+                ))
+              )}
+            </div>
           </div>
 
-          <div className="alert-list-wrap" ref={alertListRef}>
-            {alerts.length === 0 ? (
-              <div className="alert-empty">
-                <div className="alert-empty-pulse">
-                  <div className="pulse-ring" />
-                  <div className="pulse-ring" />
-                  <div className="pulse-ring" />
-                  <div className="pulse-center" />
-                </div>
-                <div className="alert-empty-icon">📡</div>
-                <div className="alert-empty-title">
-                  {connected ? "Listening for Alerts…" : "No Alerts Yet"}
-                </div>
-                <div className="alert-empty-sub">
-                  {connected
-                    ? "You are connected to the corridor network. When an emergency vehicle is nearby, you'll receive an immediate alert here."
-                    : "Save your vehicle info and start listening to receive real-time emergency corridor alerts."}
-                </div>
-              </div>
+          <div className="main-col-right">
+            {isMapLoaded && driverGps ? (
+              <MapView 
+                origin={driverGps}
+                ambulancePosition={activeAmbulance}
+                bearing={activeAmbulance?.bearing}
+                isEmergencyActive={!!activeAmbulance}
+                routePoints={activeAmbulanceRoute}
+                viewMode="driver"
+              />
             ) : (
-              alerts.map((a) => (
-                <div key={a.id} className={`al-item ${a.active ? "active" : ""} ${a.type}`}>
-                  <div className="al-top">
-                    <div className="al-top-left">
-                      <span className="al-icon">{a.type === "ambulance" ? "🚑" : "🚗"}</span>
-                      <span className="al-vid" style={{ color: a.type === "ambulance" ? "var(--danger)" : "var(--amber)" }}>
-                        {a.vehicleId}
-                      </span>
-                      <span className={`al-pri ${a.type}`}>P-{a.priority}</span>
-                    </div>
-                    <div style={{ display: "flex", alignItems: "center", gap: "0.6rem" }}>
-                      <span className={`al-active-badge ${a.active ? "is-active" : "dismissed"}`}>
-                        {a.active ? "● ACTIVE" : "CLEARED"}
-                      </span>
-                      <span className="al-time">{a.time}</span>
-                    </div>
-                  </div>
-                  <div className={`al-instruction ${a.type}`}>
-                    {a.instruction}
-                  </div>
-                  <div className="al-meta">
-                    <div className="al-meta-item">📍 {a.direction}</div>
-                    <div className="al-meta-item">↔ {a.distance}</div>
-                    <div className="al-meta-item">⏱ ETA {a.eta}</div>
-                  </div>
-                </div>
-              ))
+              <div style={{ width: "100%", height: "100%", display: "flex", alignItems: "center", justifyContent: "center", background: "#0B1221", color: "white" }}>
+                <span>Loading map...</span>
+              </div>
             )}
           </div>
         </div>
