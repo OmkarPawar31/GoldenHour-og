@@ -43,8 +43,6 @@ const MAP_STYLES: google.maps.MapTypeStyle[] = [
 ];
 
 export default function HospitalDashboard() {
-    const [beds, setBeds] = useState(12);
-    const [bedInput, setBedInput] = useState("12");
     const [isOpen, setIsOpen] = useState(true);
     const [mapReady, setMapReady] = useState(false);
     const [mapExpanded, setMapExpanded] = useState(false);
@@ -754,67 +752,7 @@ export default function HospitalDashboard() {
                             </div>
                         </div>
 
-                        {/* Stats */}
-                        <div className="stats-grid">
-                            {/* Beds */}
-                            <div className="stat-box">
-                                <div className="stat-eyebrow">Available Beds</div>
-                                <div className="stat-val-row">
-                                    <input
-                                        type="number"
-                                        className="bed-num-input"
-                                        value={bedInput}
-                                        min={0} max={999}
-                                        onChange={e => {
-                                            setBedInput(e.target.value);
-                                            const n = parseInt(e.target.value, 10);
-                                            if (!isNaN(n) && n >= 0 && n <= 999) setBeds(n);
-                                        }}
-                                        onBlur={() => {
-                                            if (!bedInput || isNaN(parseInt(bedInput, 10))) setBedInput(String(beds));
-                                        }}
-                                    />
-                                    <div className="bed-stepper">
-                                        <button className="bed-step-btn" onClick={() => { const n = beds + 1; setBeds(n); setBedInput(String(n)); }}>▲</button>
-                                        <button className="bed-step-btn" onClick={() => { const n = Math.max(0, beds - 1); setBeds(n); setBedInput(String(n)); }}>▼</button>
-                                    </div>
-                                    <span className="stat-unit">/ 60</span>
-                                </div>
-                                <div className="stat-sub">Click number to edit</div>
-                                <div className="mini-bar">
-                                    <div className="mini-fill" style={{ width: `${Math.min((beds / 60) * 100, 100)}%`, background: beds < 10 ? '#dc2626' : beds < 25 ? '#f59e0b' : '#E8571A' }} />
-                                </div>
-                            </div>
 
-                            {/* Fleet */}
-                            <div className="stat-box">
-                                <div className="stat-eyebrow">Ready Units</div>
-                                <div className="stat-val-row">
-                                    <span className="stat-num green">{fleet.filter(a => a.status === "Available").length}</span>
-                                    <span className="stat-unit">/ {fleet.length} total</span>
-                                </div>
-                                <div className="stat-sub">ambulances on standby</div>
-                                <div className="mini-bar">
-                                    <div className="mini-fill" style={{ width: `${(fleet.filter(a => a.status === "Available").length / fleet.length) * 100}%`, background: '#10B981' }} />
-                                </div>
-                            </div>
-
-                            {/* Requests */}
-                            <div className="stat-box">
-                                <div className="stat-eyebrow">Pending Requests</div>
-                                <div className="stat-val-row">
-                                    <span className={`stat-num ${requests.filter(r => r.status === 'Pending').length > 0 ? 'red' : ''}`}>
-                                        {requests.filter(r => r.status === 'Pending').length}
-                                    </span>
-                                    <span className="stat-unit">queued</span>
-                                </div>
-                                <div className="stat-sub">
-                                    {requests.filter(r => r.status === 'Pending').length > 0
-                                        ? '⚠ Response needed'
-                                        : 'All clear'}
-                                </div>
-                            </div>
-                        </div>
 
                         {/* Fleet / Requests */}
                         <div className="section-wrap">
