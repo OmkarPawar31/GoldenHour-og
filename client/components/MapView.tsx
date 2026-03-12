@@ -37,6 +37,10 @@ export interface MapViewProps {
   remainingDistanceM?: number;
   isDemoMode?: boolean;
 
+  // Ambulance depot
+  ambulanceDepot?: Location | null;
+  currentLeg?: 'depot-to-patient' | 'patient-to-hospital' | 'idle';
+
   // Callbacks
   onMapLoad?: (map: google.maps.Map) => void;
 }
@@ -115,6 +119,8 @@ export default function MapView({
   bearing = 0,
   etaMinutes,
   remainingDistanceM,
+  ambulanceDepot,
+  currentLeg = 'idle',
   onMapLoad,
 }: MapViewProps) {
   const mapRef = useRef<google.maps.Map | null>(null);
@@ -192,18 +198,22 @@ export default function MapView({
     }
   }, [destination, isEmergencyActive, isIntroAnimating]);
 
-  // Slow Cinematic Animation to Hospital when Emergency Starts
+  // Slow Cinematic Animation when Emergency Starts
   useEffect(() => {
     if (isEmergencyActive && !prevIsEmergencyRef.current && mapRef.current && destination) {
       // Start Intro Sequence
       setIsIntroAnimating(true);
       setIsAnimatingDestination(true);
 
-      const ambPos = latestAmbulancePos.current || origin || defaultCenter;
+      // For depot-to-patient leg, pan from depot to patient (origin)
+      // For patient-to-hospital leg, pan from patient to hospital (destination)
+      const ambPos = ambulanceDepot || latestAmbulancePos.current || origin || defaultCenter;
+      const endPos = currentLeg === 'depot-to-patient' && origin ? origin : destination;
+
       const startLat = typeof ambPos.lat === 'function' ? (ambPos as any).lat() : ambPos.lat;
       const startLng = typeof ambPos.lng === 'function' ? (ambPos as any).lng() : ambPos.lng;
-      const endLat = typeof destination.lat === 'function' ? (destination as any).lat() : destination.lat;
-      const endLng = typeof destination.lng === 'function' ? (destination as any).lng() : destination.lng;
+      const endLat = typeof endPos.lat === 'function' ? (endPos as any).lat() : endPos.lat;
+      const endLng = typeof endPos.lng === 'function' ? (endPos as any).lng() : endPos.lng;
 
       const duration = 3500; // 3.5s cinematic pan
       const startTime = performance.now();
@@ -268,7 +278,7 @@ export default function MapView({
         onLoad={onLoad}
         onUnmount={onUnmount}
       >
-        {/* Origin marker (when no ambulance simulation is running) */}
+        {/* Origin / Patient GPS marker (when no ambulance simulation is running) */}
         {origin && !ambulancePosition && (
           <Marker
             position={origin}
@@ -282,6 +292,53 @@ export default function MapView({
             }}
             zIndex={200}
           />
+        )}
+
+        {/* Patient GPS marker with pulse — shown during emergency to mark patient location */}
+        {origin && isEmergencyActive && (
+          <OverlayView
+            position={origin}
+            mapPaneName={OverlayView.OVERLAY_MOUSE_TARGET}
+          >
+            <div className="absolute top-0 left-0 -translate-x-1/2 -translate-y-1/2 z-[90] drop-shadow-lg">
+              {/* Pulse ring */}
+              <div className="absolute inset-[-12px] bg-emerald-500/20 rounded-full animate-ping pointer-events-none" />
+              <div className="absolute inset-[-6px] border border-emerald-400/50 rounded-full animate-pulse pointer-events-none" />
+              {/* Patient icon */}
+              <div className="w-9 h-9 bg-emerald-600 rounded-full border-[3px] border-white flex items-center justify-center shadow-[0_0_15px_rgba(16,185,129,0.6)]">
+                <span className="text-white text-sm">🧑</span>
+              </div>
+              {/* Label */}
+              <div className="absolute top-full left-1/2 -translate-x-1/2 mt-1 px-2 py-0.5 bg-emerald-700/90 text-white text-[10px] font-mono rounded whitespace-nowrap backdrop-blur-sm border border-emerald-500/30">
+                PATIENT
+              </div>
+            </div>
+          </OverlayView>
+        )}
+
+        {/* Ambulance Depot marker — static base station */}
+        {ambulanceDepot && (
+          <OverlayView
+            position={ambulanceDepot}
+            mapPaneName={OverlayView.OVERLAY_MOUSE_TARGET}
+          >
+            <div className="absolute top-0 left-0 -translate-x-1/2 -translate-y-1/2 z-[80] drop-shadow-lg">
+              {/* Subtle pulse when idle */}
+              {!isEmergencyActive && (
+                <div className="absolute inset-[-10px] bg-blue-500/15 rounded-full animate-pulse pointer-events-none" />
+              )}
+              {/* Depot icon */}
+              <div className="w-10 h-10 bg-gradient-to-br from-blue-600 to-blue-800 rounded-lg border-[2px] border-white/80 flex items-center justify-center shadow-[0_0_15px_rgba(37,99,235,0.5)] rotate-45">
+                <div className="-rotate-45">
+                  <span className="text-white text-lg">🚑</span>
+                </div>
+              </div>
+              {/* Label */}
+              <div className="absolute top-full left-1/2 -translate-x-1/2 mt-2 px-2 py-0.5 bg-blue-900/90 text-blue-200 text-[10px] font-mono rounded whitespace-nowrap backdrop-blur-sm border border-blue-500/30">
+                AMBULANCE DEPOT
+              </div>
+            </div>
+          </OverlayView>
         )}
 
         {/* Hospital markers */}
@@ -450,17 +507,57 @@ export default function MapView({
       </GoogleMap>
 
       {/* Floating Info Panel — Top-left glassmorphism overlay */}
-      {isEmergencyActive && destinationName && (
+      {isEmergencyActive && (
         <div className="absolute top-4 left-4 z-20 pointer-events-none animate-in fade-in slide-in-from-top-3 duration-500">
-          <div className="bg-[#0a0e1a]/85 backdrop-blur-xl border border-white/[0.08] rounded-xl px-4 py-3 shadow-[0_8px_32px_rgba(0,0,0,0.5)] pointer-events-auto min-w-[200px]">
+          <div className="bg-[#0a0e1a]/85 backdrop-blur-xl border border-white/[0.08] rounded-xl px-4 py-3 shadow-[0_8px_32px_rgba(0,0,0,0.5)] pointer-events-auto min-w-[220px]">
             {/* Status dot + label */}
             <div className="flex items-center gap-2 mb-2">
-              <div className="w-2 h-2 rounded-full bg-red-500 animate-pulse shadow-[0_0_8px_rgba(239,68,68,0.8)]" />
-              <span className="text-[10px] text-red-400 font-mono uppercase tracking-[0.2em] font-bold">En Route</span>
+              <div className={`w-2 h-2 rounded-full animate-pulse shadow-[0_0_8px] ${
+                currentLeg === 'depot-to-patient'
+                  ? 'bg-blue-500 shadow-blue-500/80'
+                  : 'bg-red-500 shadow-red-500/80'
+              }`} />
+              <span className={`text-[10px] font-mono uppercase tracking-[0.2em] font-bold ${
+                currentLeg === 'depot-to-patient' ? 'text-blue-400' : 'text-red-400'
+              }`}>
+                {currentLeg === 'depot-to-patient' ? 'Picking Up Patient' : 'En Route to Hospital'}
+              </span>
             </div>
+
+            {/* Route flow indicator */}
+            <div className="flex items-center gap-1.5 mb-2 px-1">
+              <div className={`w-5 h-5 rounded flex items-center justify-center text-xs ${
+                currentLeg === 'depot-to-patient'
+                  ? 'bg-blue-500/30 border border-blue-400/50'
+                  : 'bg-blue-500/10 border border-blue-400/20'
+              }`}>🚑</div>
+              <div className={`flex-1 h-[2px] ${
+                currentLeg === 'depot-to-patient'
+                  ? 'bg-gradient-to-r from-blue-500 to-blue-300 animate-pulse'
+                  : 'bg-blue-500/20'
+              }`} />
+              <div className={`w-5 h-5 rounded flex items-center justify-center text-xs ${
+                currentLeg === 'depot-to-patient'
+                  ? 'bg-emerald-500/30 border border-emerald-400/50 animate-pulse'
+                  : currentLeg === 'patient-to-hospital'
+                    ? 'bg-emerald-500/30 border border-emerald-400/50'
+                    : 'bg-emerald-500/10 border border-emerald-400/20'
+              }`}>🧑</div>
+              <div className={`flex-1 h-[2px] ${
+                currentLeg === 'patient-to-hospital'
+                  ? 'bg-gradient-to-r from-emerald-500 to-red-400 animate-pulse'
+                  : 'bg-gray-600/30'
+              }`} />
+              <div className={`w-5 h-5 rounded flex items-center justify-center text-xs ${
+                currentLeg === 'patient-to-hospital'
+                  ? 'bg-red-500/30 border border-red-400/50 animate-pulse'
+                  : 'bg-red-500/10 border border-red-400/20'
+              }`}>🏥</div>
+            </div>
+
             {/* Destination name */}
             <p className="text-white font-mono text-sm font-semibold truncate max-w-[240px]">
-              {destinationName}
+              {currentLeg === 'depot-to-patient' ? 'Patient Location' : destinationName || 'Hospital'}
             </p>
             {/* Stats row */}
             <div className="flex items-center gap-4 mt-2 pt-2 border-t border-white/[0.06]">

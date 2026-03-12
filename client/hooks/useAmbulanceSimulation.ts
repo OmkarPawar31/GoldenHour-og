@@ -39,6 +39,7 @@ export interface UseAmbulanceSimulationProps {
     isActive: boolean;
     onToast?: (message: string, type: "success" | "warning" | "info") => void;
     onRecalculate?: (lat: number, lng: number) => void;
+    onLegComplete?: () => void;
 }
 
 /* ─────────────────────────────────────────
@@ -95,6 +96,7 @@ export function useAmbulanceSimulation({
     isActive,
     onToast,
     onRecalculate,
+    onLegComplete,
 }: UseAmbulanceSimulationProps) {
     /* ── State ── */
     const [ambulancePosition, setAmbulancePosition] = useState<LatLng | null>(null);
@@ -357,14 +359,20 @@ export function useAmbulanceSimulation({
                 currentIndexRef.current = Math.min(currentIndexRef.current + step, points.length - 1);
                 const idx = currentIndexRef.current;
 
-                // Check if arrived
+                // Check if arrived at end of current leg
                 if (idx >= points.length - 1) {
-                    setIsComplete(true);
                     setAmbulancePosition(points[points.length - 1]);
                     setProgressPercent(100);
                     if (animIntervalRef.current) {
                         clearInterval(animIntervalRef.current);
                         animIntervalRef.current = null;
+                    }
+                    // Reset index for potential next leg
+                    currentIndexRef.current = 0;
+                    if (onLegComplete) {
+                        onLegComplete();
+                    } else {
+                        setIsComplete(true);
                     }
                     return;
                 }
@@ -402,6 +410,7 @@ export function useAmbulanceSimulation({
         checkSignalProximity,
         updateStats,
         getAnimIntervalMs,
+        onLegComplete,
     ]);
 
     /* ── Restart animation when speed changes ── */
@@ -424,12 +433,17 @@ export function useAmbulanceSimulation({
             const idx = currentIndexRef.current;
 
             if (idx >= points.length - 1) {
-                setIsComplete(true);
                 setAmbulancePosition(points[points.length - 1]);
                 setProgressPercent(100);
                 if (animIntervalRef.current) {
                     clearInterval(animIntervalRef.current);
                     animIntervalRef.current = null;
+                }
+                currentIndexRef.current = 0;
+                if (onLegComplete) {
+                    onLegComplete();
+                } else {
+                    setIsComplete(true);
                 }
                 return;
             }

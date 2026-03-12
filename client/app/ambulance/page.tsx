@@ -22,6 +22,9 @@ const MapView = dynamic(() => import("../../components/MapView"), { ssr: false }
 const FALLBACK_GPS: Location = { lat: 18.9894, lng: 73.1175 };
 const DEFAULT_HOSPITAL = { lat: 18.9904, lng: 73.1165 };
 
+// Static ambulance depot location — near the GPS origin (~500m north-east offset)
+const AMBULANCE_DEPOT: Location = { lat: 18.9934, lng: 73.1215 };
+
 export default function AmbulancePage() {
   const { location, error: gpsError } = useLocation();
   const [gpsFallbackTriggered, setGpsFallbackTriggered] = useState(false);
@@ -34,6 +37,9 @@ export default function AmbulancePage() {
   const [destinationName, setDestinationName] = useState("MGM Hospital Panvel");
   const [routePoints, setRoutePoints] = useState<{ lat: number; lng: number }[]>([]);
   const [directionsResult, setDirectionsResult] = useState<google.maps.DirectionsResult | null>(null);
+  // Track whether the ambulance has reached the patient (leg 1 complete)
+  const [ambulanceAtPatient, setAmbulanceAtPatient] = useState(false);
+  const [currentLeg, setCurrentLeg] = useState<'depot-to-patient' | 'patient-to-hospital' | 'idle'>('idle');
   const [isEmergencyActive, setIsEmergencyActive] = useState(false);
   const { toasts, showToast, dismissToast } = useToast();
   const realGpsLocation = origin || FALLBACK_GPS;
@@ -154,15 +160,36 @@ export default function AmbulancePage() {
     fetchHospitals(null, origin);
   }, [origin, fetchHospitals]);
 
+  // When simulation completes leg 1 (depot→patient), start leg 2 (patient→hospital)
+  const handleLegComplete = useCallback(async () => {
+    if (currentLeg === 'depot-to-patient') {
+      showToast("🚑 Ambulance reached patient! Routing to hospital...", "success");
+      setAmbulanceAtPatient(true);
+      setCurrentLeg('patient-to-hospital');
+      try {
+        const routeData = await generateRoute(realGpsLocation, destination);
+        setRoutePoints(routeData.path);
+        setDirectionsResult(routeData.result);
+      } catch (err) {
+        showToast(`Failed to generate route to hospital: ${err}`, "warning");
+      }
+    } else if (currentLeg === 'patient-to-hospital') {
+      showToast("🏥 Ambulance arrived at hospital! Patient delivered safely.", "success");
+      setCurrentLeg('idle');
+    }
+  }, [currentLeg, realGpsLocation, destination, showToast]);
+
   const sim = useAmbulanceSimulation({
     routePoints,
     realGpsLocation,
     isActive: isEmergencyActive,
     onToast: showToast,
+    onLegComplete: handleLegComplete,
     onRecalculate: async (lat, lng) => {
       showToast("Recalculating route from new position...", "warning");
       try {
-        const routeData = await generateRoute({ lat, lng }, destination);
+        const recalcDest = currentLeg === 'depot-to-patient' ? realGpsLocation : destination;
+        const routeData = await generateRoute({ lat, lng }, recalcDest);
         setRoutePoints(routeData.path);
         setDirectionsResult(routeData.result);
       } catch (_) {
@@ -197,16 +224,16 @@ export default function AmbulancePage() {
     try {
       showToast("Activating Green Corridor System...", "info");
 
-      // Always generate a DirectionsResult client-side for road-following display
-      showToast("Generating optimal dispatch route...", "info");
-      const routeData = await generateRoute(realGpsLocation, destination);
-      const finalPath = routeData.path;
-      const finalDirections = routeData.result;
+      // LEG 1: Ambulance depot → Patient (GPS)
+      showToast("🚑 Dispatching ambulance to patient location...", "info");
+      setCurrentLeg('depot-to-patient');
+      setAmbulanceAtPatient(false);
 
-      setRoutePoints(finalPath);
-      setDirectionsResult(finalDirections);
+      const leg1Route = await generateRoute(AMBULANCE_DEPOT, realGpsLocation);
+      setRoutePoints(leg1Route.path);
+      setDirectionsResult(leg1Route.result);
       setIsEmergencyActive(true);
-      showToast("Emergency Activated! System Live.", "success");
+      showToast("Emergency Activated! Ambulance en route to patient.", "success");
     } catch (err) {
       showToast(`Failed to generate route: ${err}`, "warning");
     }
@@ -256,6 +283,8 @@ export default function AmbulancePage() {
     setIsEmergencyActive(false);
     setRoutePoints([]);
     setDirectionsResult(null);
+    setCurrentLeg('idle');
+    setAmbulanceAtPatient(false);
     sim.resetSimulation();
   };
 
@@ -383,6 +412,8 @@ export default function AmbulancePage() {
                 selectedHospitalId={selectedHospitalId}
                 onHospitalSelect={handleHospitalSelect}
                 onMapLoad={handleMapLoad}
+                ambulanceDepot={AMBULANCE_DEPOT}
+                currentLeg={currentLeg}
               />
             ) : (
               <div className="w-full h-full flex flex-col items-center justify-center border border-gray-800 rounded-xl">
