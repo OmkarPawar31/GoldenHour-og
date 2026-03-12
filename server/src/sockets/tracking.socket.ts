@@ -5,6 +5,15 @@ import { getActiveCorridor } from "../services/greenCorridorService";
 
 export function setupTrackingSocket(io: Server) {
   const ns = io.of("/tracking");
+  const adminNs = io.of("/admin-alerts");
+
+  // Admin alerts namespace — admin dashboard connects here
+  adminNs.on("connection", (socket) => {
+    console.log("Admin alerts socket connected:", socket.id);
+    socket.on("disconnect", () => {
+      console.log("Admin alerts socket disconnected:", socket.id);
+    });
+  });
 
   ns.on("connection", (socket) => {
     console.log("Tracking socket connected:", socket.id);
@@ -18,9 +27,9 @@ export function setupTrackingSocket(io: Server) {
     }) => {
       try {
         // Persist location to DB
-        await Vehicle.findByIdAndUpdate(data.vehicleId, {
+        const vehicle = await Vehicle.findByIdAndUpdate(data.vehicleId, {
           location: { lat: data.lat, lng: data.lng },
-        });
+        }, { new: true });
 
         // Broadcast to session room and globally
         const payload = {
@@ -48,7 +57,37 @@ export function setupTrackingSocket(io: Server) {
                 inRange: true,
                 message: "You are within the emergency corridor. Please clear the way.",
               });
+
+              // Broadcast ambulance alert to admin dashboard
+              adminNs.emit("ambulance-alert", {
+                type: "corridor-proximity",
+                vehicleId: data.vehicleId,
+                plateNumber: vehicle?.plateNumber || data.vehicleId,
+                sessionId: data.sessionId,
+                lat: data.lat,
+                lng: data.lng,
+                speed: data.speed || 0,
+                message: `Ambulance ${vehicle?.plateNumber || data.vehicleId.slice(-6)} detected in emergency corridor`,
+                severity: "critical",
+                timestamp: new Date(),
+              });
             }
+          }
+
+          // Always notify admin of active ambulance movement
+          if (vehicle?.type === "ambulance") {
+            adminNs.emit("ambulance-alert", {
+              type: "ambulance-moving",
+              vehicleId: data.vehicleId,
+              plateNumber: vehicle?.plateNumber || data.vehicleId,
+              sessionId: data.sessionId,
+              lat: data.lat,
+              lng: data.lng,
+              speed: data.speed || 0,
+              message: `Ambulance ${vehicle?.plateNumber || data.vehicleId.slice(-6)} en-route — ${data.speed || 0} km/h`,
+              severity: "warning",
+              timestamp: new Date(),
+            });
           }
         } else {
           ns.emit("vehicle-moved", payload);
