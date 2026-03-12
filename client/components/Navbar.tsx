@@ -13,6 +13,7 @@ const ROLE_NAV: Record<string, { icon: string; label: string; href: string }> = 
   driver:    { icon: "🚗", label: "Driver",         href: "/driver"    },
   private:   { icon: "🚗", label: "Emergency",     href: "/private-emergency" },
   organizer: { icon: "📋", label: "Control Room",  href: "/operator" },
+  signal:    { icon: "🚦", label: "Smart Signal",  href: "/signal" },
 };
 
 export default function Navbar() {
