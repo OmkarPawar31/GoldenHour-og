@@ -4,6 +4,7 @@
 import { useEffect, useRef, useState } from "react";
 import { GoogleMap, Marker, Polyline, OverlayView, DirectionsRenderer } from "@react-google-maps/api";
 import { Location, Hospital, RouteInfo } from "../types";
+import { DummyCar } from "../hooks/useAmbulanceSimulation";
 
 export interface TrafficSignal {
   id: string;
@@ -40,6 +41,12 @@ export interface MapViewProps {
   // Ambulance depot
   ambulanceDepot?: Location | null;
   currentLeg?: 'depot-to-patient' | 'patient-to-hospital' | 'idle';
+
+  // Dummy cars
+  dummyCars?: DummyCar[];
+
+  // View Mode
+  viewMode?: "ambulance" | "driver";
 
   // Callbacks
   onMapLoad?: (map: google.maps.Map) => void;
@@ -121,6 +128,8 @@ export default function MapView({
   remainingDistanceM,
   ambulanceDepot,
   currentLeg = 'idle',
+  dummyCars = [],
+  viewMode = "ambulance",
   onMapLoad,
 }: MapViewProps) {
   const mapRef = useRef<google.maps.Map | null>(null);
@@ -149,6 +158,8 @@ export default function MapView({
 
   // fitBounds on route load to show full route (only if not active)
   useEffect(() => {
+    if (viewMode === "driver") return; // Driver map logic handles its own centering
+
     if (mapRef.current && !isEmergencyActive && !isIntroAnimating) {
       if (directions) {
         const route = directions.routes[0];
@@ -163,7 +174,17 @@ export default function MapView({
         mapRef.current.fitBounds(bounds, { top: 80, left: 40, right: 40, bottom: 160 });
       }
     }
-  }, [directions, routeInfo, isEmergencyActive, isIntroAnimating]);
+  }, [directions, routeInfo, isEmergencyActive, isIntroAnimating, viewMode]);
+
+  // Handle Driver Mode Centering
+  useEffect(() => {
+    if (viewMode === "driver" && origin && mapRef.current) {
+      mapRef.current.panTo(origin);
+      if (mapRef.current.getZoom() !== 16) {
+        mapRef.current.setZoom(16);
+      }
+    }
+  }, [origin, viewMode]);
 
   // Pan to destination when hospital changes (non-emergency preview)
   useEffect(() => {
@@ -200,6 +221,8 @@ export default function MapView({
 
   // Slow Cinematic Animation when Emergency Starts
   useEffect(() => {
+    if (viewMode === "driver") return; // No cinematic intro for driver
+
     if (isEmergencyActive && !prevIsEmergencyRef.current && mapRef.current && destination) {
       // Start Intro Sequence
       setIsIntroAnimating(true);
@@ -295,7 +318,7 @@ export default function MapView({
         )}
 
         {/* Patient GPS marker with pulse — shown during emergency to mark patient location */}
-        {origin && isEmergencyActive && (
+        {origin && viewMode !== "driver" && isEmergencyActive && (
           <OverlayView
             position={origin}
             mapPaneName={OverlayView.OVERLAY_MOUSE_TARGET}
@@ -311,6 +334,27 @@ export default function MapView({
               {/* Label */}
               <div className="absolute top-full left-1/2 -translate-x-1/2 mt-1 px-2 py-0.5 bg-emerald-700/90 text-white text-[10px] font-mono rounded whitespace-nowrap backdrop-blur-sm border border-emerald-500/30">
                 PATIENT
+              </div>
+            </div>
+          </OverlayView>
+        )}
+
+        {/* Driver's Own Vehicle Marker */}
+        {origin && viewMode === "driver" && (
+          <OverlayView
+            position={origin}
+            mapPaneName={OverlayView.OVERLAY_MOUSE_TARGET}
+          >
+            <div className="absolute top-0 left-0 -translate-x-1/2 -translate-y-1/2 z-[90] drop-shadow-lg">
+              {/* Pulse ring indicating tracking */}
+              <div className="absolute inset-[-6px] border border-blue-400/50 rounded-full animate-pulse pointer-events-none" />
+              {/* Car icon */}
+              <div className="w-9 h-9 bg-blue-600 rounded-full border-[3px] border-white flex items-center justify-center shadow-[0_0_15px_rgba(59,130,246,0.6)]">
+                <span className="text-white text-sm">🚗</span>
+              </div>
+              {/* Label */}
+              <div className="absolute top-full left-1/2 -translate-x-1/2 mt-1 px-2 py-0.5 bg-blue-700/90 text-white text-[10px] font-mono rounded whitespace-nowrap backdrop-blur-sm border border-blue-500/30">
+                MY VEHICLE
               </div>
             </div>
           </OverlayView>
@@ -503,10 +547,45 @@ export default function MapView({
             </div>
           </OverlayView>
         )}
+
+        {/* Dummy Car Markers */}
+        {dummyCars.map((car) => (
+          <OverlayView
+            key={car.id}
+            position={{ lat: car.lat, lng: car.lng }}
+            mapPaneName={OverlayView.OVERLAY_MOUSE_TARGET}
+          >
+            <div className="absolute top-0 left-0 -translate-x-1/2 -translate-y-1/2 z-[95] drop-shadow-lg">
+              {/* Pulse ring when alerted */}
+              {car.alerted && (
+                <>
+                  <div className="absolute inset-[-18px] bg-red-500/25 rounded-full animate-ping pointer-events-none" />
+                  <div className="absolute inset-[-10px] border-2 border-red-400/60 rounded-full animate-pulse pointer-events-none" />
+                </>
+              )}
+              {/* Car icon */}
+              <div className={`w-10 h-10 rounded-full flex items-center justify-center transition-all duration-500 ${
+                car.alerted
+                  ? 'bg-red-600 border-[3px] border-white shadow-[0_0_20px_rgba(239,68,68,0.7)]'
+                  : 'bg-amber-500 border-[3px] border-white shadow-[0_0_12px_rgba(245,158,11,0.5)]'
+              }`}>
+                <span className="text-lg">🚗</span>
+              </div>
+              {/* Label */}
+              <div className={`absolute top-full left-1/2 -translate-x-1/2 mt-1 px-2 py-0.5 text-[10px] font-mono rounded whitespace-nowrap backdrop-blur-sm border ${
+                car.alerted
+                  ? 'bg-red-700/90 text-white border-red-500/50'
+                  : 'bg-amber-700/90 text-amber-100 border-amber-500/30'
+              }`}>
+                {car.alerted ? '⚠️ MOVE ASIDE' : 'VEHICLE'}
+              </div>
+            </div>
+          </OverlayView>
+        ))}
       </GoogleMap>
 
       {/* Floating Info Panel — Top-left glassmorphism overlay */}
-      {isEmergencyActive && (
+      {viewMode !== "driver" && isEmergencyActive && (
         <div className="absolute top-4 left-4 z-20 pointer-events-none animate-in fade-in slide-in-from-top-3 duration-500">
           <div className="bg-[#0a0e1a]/85 backdrop-blur-xl border border-white/[0.08] rounded-xl px-4 py-3 shadow-[0_8px_32px_rgba(0,0,0,0.5)] pointer-events-auto min-w-[220px]">
             {/* Status dot + label */}
