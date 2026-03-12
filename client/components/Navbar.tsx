@@ -3,6 +3,7 @@
 import { useState, useEffect } from "react";
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
+import { clearAuth } from "../utils/auth";
 import "./Navbar.css";
 
 const ROLE_NAV: Record<string, { icon: string; label: string; href: string }> = {
@@ -40,9 +41,7 @@ export default function Navbar() {
   useEffect(() => { setMobileOpen(false); }, [pathname]);
 
   const handleLogout = () => {
-    localStorage.removeItem("gh_token");
-    localStorage.removeItem("gh_user");
-    localStorage.removeItem("gh_role");
+    clearAuth();
     setLoggedIn(false); setRole(null); setMobileOpen(false);
     window.location.href = "/";
   };

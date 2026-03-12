@@ -1,18 +1,30 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
+import { saveAuth } from "../../../utils/auth";
 
 const API_BASE = process.env.NEXT_PUBLIC_API_URL || "http://localhost:5000/api";
 
 export default function OperatorLogin() {
   const router = useRouter();
+  const [ready, setReady]       = useState(false);
   const [email, setEmail]       = useState("");
   const [password, setPassword] = useState("");
   const [showPw, setShowPw]     = useState(false);
   const [loading, setLoading]   = useState(false);
   const [error, setError]       = useState("");
+
+  useEffect(() => {
+    const token = localStorage.getItem("gh_token");
+    const role  = localStorage.getItem("gh_role");
+    if (token && (role === "organizer" || role === "operator")) {
+      router.replace("/operator");
+      return;
+    }
+    setReady(true);
+  }, [router]);
 
   const handleAuth = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -23,12 +35,13 @@ export default function OperatorLogin() {
       const data = await res.json();
       if (!res.ok) throw new Error(data.message || "Authentication failed");
       
-      localStorage.setItem("gh_token", data.token); 
-      localStorage.setItem("gh_role", data.user?.role || "organizer"); // keeping backend role as organizer
+      saveAuth(data.token, data.user?.role || "organizer"); // keeping backend role as organizer
       router.push("/operator");
     } catch (err: any) { setError(err.message || "Authentication failed"); }
     finally { setLoading(false); }
   };
+
+  if (!ready) return <div style={{ minHeight: '100vh', background: '#FFFBF5', display: 'flex', alignItems: 'center', justifyContent: 'center' }}><div style={{ width: 32, height: 32, borderRadius: '50%', border: '3px solid rgba(139,92,246,0.2)', borderTopColor: '#8B5CF6', animation: 'spin 0.8s linear infinite' }} /></div>;
 
   return (
     <>

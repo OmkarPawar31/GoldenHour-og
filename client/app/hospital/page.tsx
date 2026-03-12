@@ -5,6 +5,7 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { io, Socket } from "socket.io-client";
 import { useOperatorTracking } from "../../hooks/useOperatorTracking";
+import { clearAuth } from "../../utils/auth";
 
 interface Ambulance {
     id: string;
@@ -42,8 +43,6 @@ const MAP_STYLES: google.maps.MapTypeStyle[] = [
 ];
 
 export default function HospitalDashboard() {
-    const [beds, setBeds] = useState(12);
-    const [bedInput, setBedInput] = useState("12");
     const [isOpen, setIsOpen] = useState(true);
     const [mapReady, setMapReady] = useState(false);
     const [mapExpanded, setMapExpanded] = useState(false);
@@ -75,6 +74,15 @@ export default function HospitalDashboard() {
     const inboundRoutesRef = useRef<Map<string, google.maps.Polyline>>(new Map());
     const socketRef = useRef<Socket | null>(null);
     const dispatchSocketRef = useRef<Socket | null>(null);
+
+    // ── Auth guard ──
+    useEffect(() => {
+        const token = localStorage.getItem("gh_token");
+        const role  = localStorage.getItem("gh_role");
+        if (!token || role !== "hospital") {
+            window.location.replace("/login/hospital");
+        }
+    }, []);
 
     useEffect(() => {
         const t = setInterval(() => setTime(new Date()), 1000);
@@ -136,10 +144,8 @@ export default function HospitalDashboard() {
     }, [trackingMode, fleet]);
 
     const handleLogout = () => {
-        localStorage.removeItem("gh_token");
-        localStorage.removeItem("gh_user");
-        localStorage.removeItem("gh_role");
-        router.push("/auth");
+        clearAuth();
+        window.location.replace("/login/hospital");
     };
 
     useEffect(() => {
@@ -240,7 +246,7 @@ export default function HospitalDashboard() {
     }, []);
 
     const inboundAmbulances = useMemo(() => {
-        if (typeof window === 'undefined' || !window.google?.maps?.geometry) return tracking.activeAmbulances;
+        if (typeof window === "undefined" || !window.google?.maps?.geometry) return tracking.activeAmbulances;
         return tracking.activeAmbulances.filter(a => {
             if (!a.destination) return false;
             // Name match or within 1.5km
@@ -746,67 +752,7 @@ export default function HospitalDashboard() {
                             </div>
                         </div>
 
-                        {/* Stats */}
-                        <div className="stats-grid">
-                            {/* Beds */}
-                            <div className="stat-box">
-                                <div className="stat-eyebrow">Available Beds</div>
-                                <div className="stat-val-row">
-                                    <input
-                                        type="number"
-                                        className="bed-num-input"
-                                        value={bedInput}
-                                        min={0} max={999}
-                                        onChange={e => {
-                                            setBedInput(e.target.value);
-                                            const n = parseInt(e.target.value, 10);
-                                            if (!isNaN(n) && n >= 0 && n <= 999) setBeds(n);
-                                        }}
-                                        onBlur={() => {
-                                            if (!bedInput || isNaN(parseInt(bedInput, 10))) setBedInput(String(beds));
-                                        }}
-                                    />
-                                    <div className="bed-stepper">
-                                        <button className="bed-step-btn" onClick={() => { const n = beds + 1; setBeds(n); setBedInput(String(n)); }}>▲</button>
-                                        <button className="bed-step-btn" onClick={() => { const n = Math.max(0, beds - 1); setBeds(n); setBedInput(String(n)); }}>▼</button>
-                                    </div>
-                                    <span className="stat-unit">/ 60</span>
-                                </div>
-                                <div className="stat-sub">Click number to edit</div>
-                                <div className="mini-bar">
-                                    <div className="mini-fill" style={{ width: `${Math.min((beds / 60) * 100, 100)}%`, background: beds < 10 ? '#dc2626' : beds < 25 ? '#f59e0b' : '#E8571A' }} />
-                                </div>
-                            </div>
 
-                            {/* Fleet */}
-                            <div className="stat-box">
-                                <div className="stat-eyebrow">Ready Units</div>
-                                <div className="stat-val-row">
-                                    <span className="stat-num green">{fleet.filter(a => a.status === "Available").length}</span>
-                                    <span className="stat-unit">/ {fleet.length} total</span>
-                                </div>
-                                <div className="stat-sub">ambulances on standby</div>
-                                <div className="mini-bar">
-                                    <div className="mini-fill" style={{ width: `${(fleet.filter(a => a.status === "Available").length / fleet.length) * 100}%`, background: '#10B981' }} />
-                                </div>
-                            </div>
-
-                            {/* Requests */}
-                            <div className="stat-box">
-                                <div className="stat-eyebrow">Pending Requests</div>
-                                <div className="stat-val-row">
-                                    <span className={`stat-num ${requests.filter(r => r.status === 'Pending').length > 0 ? 'red' : ''}`}>
-                                        {requests.filter(r => r.status === 'Pending').length}
-                                    </span>
-                                    <span className="stat-unit">queued</span>
-                                </div>
-                                <div className="stat-sub">
-                                    {requests.filter(r => r.status === 'Pending').length > 0
-                                        ? '⚠ Response needed'
-                                        : 'All clear'}
-                                </div>
-                            </div>
-                        </div>
 
                         {/* Fleet / Requests */}
                         <div className="section-wrap">
@@ -897,7 +843,19 @@ export default function HospitalDashboard() {
                                                         try {
                                                             const token = localStorage.getItem("gh_token");
                                                             const url = process.env.NEXT_PUBLIC_API_URL || "http://localhost:5000/api";
-                                                            // In a real app we would hit an assignment API endpoint here
+                                                            
+                                                            // Persist to MongoDB
+                                                            const assignRes = await fetch(`${url}/emergency/${req.id}/assign-ambulance`, {
+                                                                method: "POST",
+                                                                headers: { 
+                                                                    "Content-Type": "application/json", 
+                                                                    Authorization: `Bearer ${token}` 
+                                                                },
+                                                                body: JSON.stringify({ vehicleId: a.id })
+                                                            });
+
+                                                            if (!assignRes.ok) throw new Error("Database assignment failed");
+
                                                             setRequests(prev => prev.map(r => r.id === req.id ? { ...r, status: 'Assigned', assignedAmbulance: a.id } : r));
                                                             setFleet(prev => prev.map(f => f.id === a.id ? { ...f, status: 'En Route', patient: req.patientName } : f));
                                                             
@@ -914,6 +872,7 @@ export default function HospitalDashboard() {
 
                                                             showToast(`✓ ${a.id} dispatched`, 'success');
                                                         } catch(e) {
+                                                                console.error("Assignment error:", e);
                                                             showToast('API error dispatching', 'error');
                                                         }
                                                     } else {

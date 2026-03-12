@@ -13,6 +13,7 @@ export interface IEmergencySession extends Document {
   callDetails?: string;
   callReceivedAt?: Date;
   source?: "app" | "102-call" | "hospital";
+
 }
 
 const EmergencySessionSchema = new Schema<IEmergencySession>(
@@ -35,6 +36,7 @@ const EmergencySessionSchema = new Schema<IEmergencySession>(
     callDetails: { type: String },
     callReceivedAt: { type: Date },
     source: { type: String, enum: ["app", "102-call", "hospital"], default: "app" },
+
   },
   { timestamps: true }
 );

@@ -244,6 +244,15 @@ export default function AmbulancePage() {
     isActive: isEmergencyActive,
   });
 
+  // ── Auth guard ──
+  useEffect(() => {
+    const token = localStorage.getItem("gh_token");
+    const role  = localStorage.getItem("gh_role");
+    if (!token || (role !== "driver" && role !== "ambulance" && role !== "admin")) {
+      window.location.replace("/login/ambulance");
+    }
+  }, []);
+
   useEffect(() => {
     let timer: NodeJS.Timeout;
     if (!location) {
