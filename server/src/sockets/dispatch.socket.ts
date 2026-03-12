@@ -143,6 +143,57 @@ export function setupDispatchSocket(io: Server) {
       socket.emit("ambulance:list", list);
     });
 
+    // ─── Hospital assignment ───
+    
+    socket.on("hospital:assign-ambulance", (data: {
+      ambulanceId: string;
+      hospitalName: string;
+      hospitalLat: number;
+      hospitalLng: number;
+      emergencyId?: string;
+      patientName?: string;
+      priority?: string;
+    }) => {
+      const ambulance = activeAmbulances.get(data.ambulanceId);
+      
+      if (ambulance) {
+        // Update ambulance destination to hospital
+        ambulance.destination = {
+          lat: data.hospitalLat,
+          lng: data.hospitalLng,
+          name: data.hospitalName,
+        };
+
+        // Broadcast assignment notification to all hospital dashboard connections
+        // in a hospital-specific room
+        ns.to(`hospital:${data.hospitalName}`).emit("ambulance:assigned", {
+          ambulanceId: data.ambulanceId,
+          ambulance: ambulance,
+          hospitalName: data.hospitalName,
+          emergencyId: data.emergencyId,
+          patientName: data.patientName,
+          priority: data.priority,
+          assignedAt: new Date(),
+          message: `🚑 Ambulance ${data.ambulanceId} assigned and approaching your facility`,
+        });
+
+        console.log(`[Dispatch] Ambulance ${data.ambulanceId} assigned to ${data.hospitalName}`);
+      } else {
+        socket.emit("error", { message: "Ambulance not found or not active" });
+      }
+    });
+
+    // Hospital clients subscribe to assignment events
+    socket.on("hospital:subscribe", (data: { hospitalName: string }) => {
+      socket.join(`hospital:${data.hospitalName}`);
+      console.log(`[Dispatch] Hospital ${data.hospitalName} subscribed (${socket.id})`);
+    });
+
+    socket.on("hospital:unsubscribe", (data: { hospitalName: string }) => {
+      socket.leave(`hospital:${data.hospitalName}`);
+      console.log(`[Dispatch] Hospital ${data.hospitalName} unsubscribed (${socket.id})`);
+    });
+
     socket.on("disconnect", () => {
       console.log("[Dispatch] Disconnected:", socket.id);
     });

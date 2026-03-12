@@ -4,6 +4,8 @@ import { useState, useEffect, useCallback, useRef } from "react";
 import Link from "next/link";
 import { apiGet } from "../../services/api";
 import { getSocket, disconnectSocket } from "../../services/socket";
+import { useOperatorTracking } from "../../hooks/useOperatorTracking";
+import AdminLiveMap from "../../components/AdminLiveMap";
 
 interface DashboardData {
   activeEmergencies: number;
@@ -46,7 +48,7 @@ interface AmbulanceAlert {
   isNew?: boolean;
 }
 
-type Tab = "overview" | "users" | "sessions" | "alerts";
+type Tab = "overview" | "users" | "sessions" | "alerts" | "tracking";
 
 // ──────────────────────────────────────────────────
 //  SIMULATION DATA for generating realistic alerts
@@ -113,6 +115,7 @@ export default function AdminPage() {
   // Alerts state
   const [alerts, setAlerts] = useState<AmbulanceAlert[]>([]);
   const [alertCount, setAlertCount] = useState(0);
+  const tracking = useOperatorTracking();
   const [simActive, setSimActive] = useState(true);
   const [soundEnabled, setSoundEnabled] = useState(true);
   const [alertsPaused, setAlertsPaused] = useState(false);
@@ -686,6 +689,20 @@ export default function AdminPage() {
                     <span className="alert-badge">{alertCount > 99 ? "99+" : alertCount}</span>
                   )}
                 </button>
+                <div style={{ width: '1px', background: 'var(--border)', margin: '4px 8px' }} />
+                <button className={`adm-tab ${tab === "tracking" ? "active" : ""}`} onClick={() => setTab("tracking")}>
+                  <span style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                    <span style={{ width: '8px', height: '8px', borderRadius: '50%', background: tracking.isConnected ? '#10B981' : '#EF4444', 
+                                   boxShadow: tracking.isConnected ? '0 0 8px rgba(16,185,129,0.5)' : 'none', 
+                                   animation: tracking.isConnected ? 'livePulse 1.5s infinite' : 'none' }}></span>
+                    Live Track
+                    {tracking.activeAmbulances.length > 0 && (
+                      <span style={{ background: 'var(--orange)', color: '#fff', fontSize: '0.65rem', padding: '1px 6px', borderRadius: '10px', marginLeft: '4px' }}>
+                        {tracking.activeAmbulances.length}
+                      </span>
+                    )}
+                  </span>
+                </button>
               </div>
 
               {/* ─── OVERVIEW TAB ─── */}
@@ -696,7 +713,7 @@ export default function AdminPage() {
                       <div className="adm-card-icon" style={{ background: "rgba(239,68,68,0.1)" }}>🚨</div>
                       <div>
                         <div className="adm-card-value" style={{ color: "var(--red)" }}>
-                          {dashboard.activeEmergencies}
+                          {tracking.activeAmbulances.length > 0 ? tracking.activeAmbulances.length : dashboard.activeEmergencies}
                         </div>
                         <div className="adm-card-label">Active Emergencies</div>
                       </div>
@@ -729,6 +746,48 @@ export default function AdminPage() {
                       </div>
                     </div>
                   </div>
+
+                  {tracking.activeAmbulances.length > 0 && (
+                    <>
+                      <div className="adm-section-title">Live Dispatched Ambulances</div>
+                      <div className="adm-table-wrap" style={{ marginBottom: "36px" }}>
+                        <table className="adm-table">
+                          <thead>
+                            <tr>
+                              <th>Ambulance ID</th>
+                              <th>Current Leg</th>
+                              <th>Destination</th>
+                              <th>Speed</th>
+                              <th>ETA</th>
+                              <th>Progress</th>
+                            </tr>
+                          </thead>
+                          <tbody>
+                            {tracking.activeAmbulances.map(amb => (
+                              <tr key={amb.ambulanceId}>
+                                <td style={{ fontWeight: "700", color: "var(--orange)" }}>{amb.ambulanceId}</td>
+                                <td>
+                                  {amb.currentLeg === 'depot-to-patient' ? 'En route to patient' :
+                                   amb.currentLeg === 'patient-to-hospital' ? 'To hospital' : 'Idle'}
+                                </td>
+                                <td>{amb.destination?.name || "—"}</td>
+                                <td className="mono">{Math.round(amb.speed)} km/h</td>
+                                <td className="mono" style={{ color: "var(--amber)", fontWeight: 700 }}>{Math.max(1, Math.round(amb.eta))} min</td>
+                                <td>
+                                  <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                                    <div style={{ flex: 1, height: '4px', background: 'var(--slate)', borderRadius: '4px', overflow: 'hidden' }}>
+                                      <div style={{ width: `${amb.progressPercent}%`, height: '100%', background: 'var(--orange)' }} />
+                                    </div>
+                                    <span className="mono" style={{ fontSize: '0.75rem' }}>{Math.round(amb.progressPercent)}%</span>
+                                  </div>
+                                </td>
+                              </tr>
+                            ))}
+                          </tbody>
+                        </table>
+                      </div>
+                    </>
+                  )}
 
                   <div className="adm-section-title">Recent Sessions</div>
                   {dashboard.recentSessions.length === 0 ? (
@@ -980,6 +1039,13 @@ export default function AdminPage() {
                     <div ref={alertsEndRef} />
                   </div>
                 </>
+              )}
+
+              {/* ─── LIVE TRACKING TAB ─── */}
+              {tab === "tracking" && (
+                <div style={{ background: '#fff', border: '1.5px solid var(--border)', borderRadius: '16px', overflow: 'hidden', height: '600px', position: 'relative' }}>
+                  <AdminLiveMap ambulances={tracking.activeAmbulances} />
+                </div>
               )}
             </>
           )}
