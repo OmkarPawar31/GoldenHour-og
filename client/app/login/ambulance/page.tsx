@@ -10,35 +10,21 @@ const ACCENT2  = "#F97316";
 
 export default function AmbulanceLogin() {
   const router = useRouter();
-  const [tab, setTab]           = useState<"login" | "register">("login");
-  const [name, setName]         = useState("");
   const [email, setEmail]       = useState("");
   const [password, setPassword] = useState("");
   const [showPw, setShowPw]     = useState(false);
   const [loading, setLoading]   = useState(false);
   const [error, setError]       = useState("");
-  const [success, setSuccess]   = useState("");
-
-  const resetForm = () => { setName(""); setEmail(""); setPassword(""); setError(""); setSuccess(""); };
 
   const handleAuth = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!email || !password || (tab === "register" && !name)) { setError("Please fill in all required fields."); return; }
-    setLoading(true); setError(""); setSuccess("");
+    if (!email || !password) { setError("Please fill in all required fields."); return; }
+    setLoading(true); setError("");
     try {
-      const endpoint = tab === "login" ? "/auth/login" : "/auth/register";
-      const payload  = tab === "login"
-        ? { email, password }
-        : { name, email, password, role: "driver", phone: "0000000000" };
-      const res  = await fetch(`${API_BASE}${endpoint}`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(payload) });
+      const res  = await fetch(`${API_BASE}/auth/login`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ email, password }) });
       const data = await res.json();
       if (!res.ok) throw new Error(data.message || "Authentication failed");
-      if (tab === "register") {
-        setSuccess("Account created! Signing you in…");
-        setTimeout(() => { localStorage.setItem("gh_token", data.token); localStorage.setItem("gh_role", data.user?.role || "driver"); router.push("/ambulance"); }, 1000);
-      } else {
-        localStorage.setItem("gh_token", data.token); localStorage.setItem("gh_role", data.user.role); router.push("/ambulance");
-      }
+      localStorage.setItem("gh_token", data.token); localStorage.setItem("gh_role", data.user.role); router.push("/ambulance");
     } catch (err: any) { setError(err.message || "Authentication failed"); }
     finally { setLoading(false); }
   };
@@ -115,22 +101,15 @@ export default function AmbulanceLogin() {
         <div className="gh-login-form-panel">
           <div className="gh-form-wrap">
             <Link href="/" className="gh-logo-link"><div className="dot" /><span>Golden<em>Hour</em></span></Link>
-            <h1 className="gh-form-title">{tab === "login" ? "Sign In" : "Register"}</h1>
-            <p className="gh-form-sub">{tab === "login" ? "Access your fleet dashboard" : "Create your driver account"}</p>
-            <div className="gh-tabs">
-              <button className={`gh-tab ${tab === "login" ? "gh-tab-active" : "gh-tab-inactive"}`} onClick={() => { setTab("login"); resetForm(); }}>Sign In</button>
-              <button className={`gh-tab ${tab === "register" ? "gh-tab-active" : "gh-tab-inactive"}`} onClick={() => { setTab("register"); resetForm(); }}>Register</button>
-            </div>
+            <h1 className="gh-form-title">Sign In</h1>
+            <p className="gh-form-sub">Access your fleet dashboard</p>
             <form onSubmit={handleAuth}>
-              {tab === "register" && (<div className="gh-field"><label>Full Name</label><input className="gh-input" type="text" placeholder="John Doe" value={name} onChange={e => setName(e.target.value)} autoFocus /></div>)}
               <div className="gh-field"><label>Email Address</label><input className="gh-input" type="email" placeholder="driver@station.com" value={email} onChange={e => setEmail(e.target.value)} /></div>
               <div className="gh-field"><label>Password</label><div className="gh-input-wrap"><input className="gh-input" type={showPw ? "text" : "password"} placeholder="••••••••" value={password} onChange={e => setPassword(e.target.value)} style={{ paddingRight: "3rem" }} /><button type="button" className="gh-pw-toggle" onClick={() => setShowPw(p => !p)}>{showPw ? "🙈" : "👁"}</button></div></div>
-              {error   && <div className="gh-error">⚠ {error}</div>}
-              {success && <div className="gh-success">✓ {success}</div>}
-              <button type="submit" className="gh-submit" disabled={loading}>{loading && <span className="gh-spinner" />}{loading ? "Authenticating…" : tab === "login" ? "Sign In to Fleet Control →" : "Create Driver Account →"}</button>
+              {error && <div className="gh-error">⚠ {error}</div>}
+              <button type="submit" className="gh-submit" disabled={loading}>{loading && <span className="gh-spinner" />}{loading ? "Authenticating…" : "Sign In to Fleet Control →"}</button>
             </form>
             <div className="gh-divider"><span /><em>SECURE LOGIN</em><span /></div>
-            <p className="gh-note">{tab === "login" ? <><a onClick={() => { setTab("register"); resetForm(); }}>Don&apos;t have an account? Register here</a></> : <><a onClick={() => { setTab("login"); resetForm(); }}>Already registered? Sign in here</a></>}</p>
             <p className="gh-note" style={{ marginTop: "0.5rem" }}><Link href="/" style={{ color: "#94A3B8", fontSize: "0.75rem" }}>← Back to Home</Link></p>
           </div>
         </div>

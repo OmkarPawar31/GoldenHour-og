@@ -52,7 +52,7 @@ export default function HospitalDashboard() {
     const [hospName, setHospName] = useState("Golden Hour Civil Hospital");
     const [showSettings, setShowSettings] = useState(false);
     const [showAddAmbulance, setShowAddAmbulance] = useState(false);
-    const [newAmbData, setNewAmbData] = useState({ plateNumber: "", driverName: "", driverPhone: "", driverEmail: "" });
+    const [newAmbData, setNewAmbData] = useState({ plateNumber: "", driverName: "", driverPhone: "", driverEmail: "", driverPassword: "" });
     const [isSubmittingAmb, setIsSubmittingAmb] = useState(false);
     const [toast, setToast] = useState<{ msg: string; type: "success" | "error" } | null>(null);
     const [arrivalAlert, setArrivalAlert] = useState<Ambulance | null>(null);
@@ -936,13 +936,23 @@ export default function HospitalDashboard() {
                                 onChange={e => setNewAmbData({...newAmbData, driverEmail: e.target.value})} 
                             />
                         </div>
+                        <div className="m-field">
+                            <label className="m-label">Driver Password (for Login)</label>
+                            <input 
+                                className="m-input" 
+                                type="password"
+                                placeholder="••••••••" 
+                                value={newAmbData.driverPassword} 
+                                onChange={e => setNewAmbData({...newAmbData, driverPassword: e.target.value})} 
+                            />
+                        </div>
 
                         <div className="m-actions">
                             <button 
                                 className="m-btn primary" 
                                 disabled={isSubmittingAmb}
                                 onClick={async () => {
-                                    if(!newAmbData.plateNumber || !newAmbData.driverName || !newAmbData.driverPhone || !newAmbData.driverEmail) {
+                                    if(!newAmbData.plateNumber || !newAmbData.driverName || !newAmbData.driverPhone || !newAmbData.driverEmail || !newAmbData.driverPassword) {
                                         showToast("All fields are required", "error");
                                         return;
                                     }
@@ -962,7 +972,7 @@ export default function HospitalDashboard() {
                                         if(res.ok) {
                                             showToast("Ambulance added successfully!", "success");
                                             setShowAddAmbulance(false);
-                                            setNewAmbData({ plateNumber: "", driverName: "", driverPhone: "", driverEmail: "" });
+                                            setNewAmbData({ plateNumber: "", driverName: "", driverPhone: "", driverEmail: "", driverPassword: "" });
                                             // The interval fetch will automatically grab it soon
                                         } else {
                                             showToast(data.message || "Failed to add ambulance", "error");
