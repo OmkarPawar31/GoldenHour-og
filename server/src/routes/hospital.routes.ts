@@ -65,9 +65,9 @@ router.get("/fleet", async (req: AuthRequest, res: Response) => {
 // POST /api/hospital/fleet - add a new ambulance
 router.post("/fleet", async (req: AuthRequest, res: Response) => {
   try {
-    const { plateNumber, driverName, driverPhone, driverEmail } = req.body;
+    const { plateNumber, driverName, driverPhone, driverEmail, driverPassword } = req.body;
 
-    if (!plateNumber || !driverName || !driverPhone || !driverEmail) {
+    if (!plateNumber || !driverName || !driverPhone || !driverEmail || !driverPassword) {
       return res.status(400).json({ message: "All fields are required" });
     }
 
@@ -83,7 +83,7 @@ router.post("/fleet", async (req: AuthRequest, res: Response) => {
       driver = await User.create({
         name: driverName,
         email: driverEmail,
-        password: "password123", // Default password for new drivers
+        password: driverPassword,
         role: "driver",
         phone: driverPhone,
       });
