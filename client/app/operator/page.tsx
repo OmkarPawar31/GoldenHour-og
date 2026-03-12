@@ -5,6 +5,7 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useOperatorTracking, TrackedAmbulance } from "../../hooks/useOperatorTracking";
 import { clearAuth } from "../../utils/auth"; // Added import for clearAuth
+import { EMERGENCY_PRIORITIES, PriorityLevel, getPriorityByValue } from "../../utils/priorityUtils";
 
 // --- Constants ---
 const MAPS_API_KEY = process.env.NEXT_PUBLIC_GOOGLE_MAPS_API_KEY || "";
@@ -55,6 +56,7 @@ export default function OperatorDashboard() {
     const [selectedAmbulanceForCall, setSelectedAmbulanceForCall] = useState<any | null>(null);
     const [isAssigning, setIsAssigning] = useState(false);
     const [toast, setToast] = useState<{ msg: string; type: "success" | "error" } | null>(null);
+    const [emergencyPriority, setEmergencyPriority] = useState<PriorityLevel>("high");
 
     // ─── Demo Mode State ───
     const [isDemoMode, setIsDemoMode] = useState(false);
@@ -718,7 +720,7 @@ export default function OperatorDashboard() {
                     callerName: callerName,
                     callerLocation: patientLocation,
                     details: callDetails,
-                    priority: "critical",
+                    priority: emergencyPriority,
                 })
             });
 
@@ -764,6 +766,7 @@ export default function OperatorDashboard() {
         setCallDetails("");
         setPatientLocation(null);
         setSelectedAmbulanceForCall(null);
+        setEmergencyPriority("high");
         setActiveCall(null);
     };
 
@@ -1301,10 +1304,58 @@ export default function OperatorDashboard() {
                 {/* Assignment Modal */}
                 {selectedAmbulance && (
                     <div className="fade-up" style={{ position: 'fixed', inset: 0, zIndex: 100, display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'rgba(15, 23, 42, 0.4)', backdropFilter: 'blur(4px)' }}>
-                        <div style={{ background: '#FFFFFF', padding: '2rem', borderRadius: '16px', width: '400px', boxShadow: '0 20px 40px rgba(0,0,0,0.1)', border: '1px solid #E2E8F0' }}>
+                        <div style={{ background: '#FFFFFF', padding: '2rem', borderRadius: '16px', width: '460px', maxHeight: '85vh', overflowY: 'auto', boxShadow: '0 20px 40px rgba(0,0,0,0.1)', border: '1px solid #E2E8F0' }}>
                             <h2 style={{ margin: '0 0 10px 0', color: '#1E293B', fontSize: '1.4rem', fontWeight: 800 }}>Dispatch {selectedAmbulance.name}</h2>
                             <p style={{ margin: '0 0 20px 0', color: '#64748B', fontSize: '0.9rem' }}>Ambulance ID: <span style={{ fontFamily: "'JetBrains Mono', monospace" }}>{selectedAmbulance.id}</span></p>
                             
+                            {/* Priority Selector */}
+                            <label style={{ display: 'block', marginBottom: '0.6rem', fontSize: '0.8rem', fontWeight: 700, color: '#334155', textTransform: 'uppercase', letterSpacing: '0.05em' }}>Emergency Priority</label>
+                            <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', marginBottom: '1.5rem' }}>
+                                {EMERGENCY_PRIORITIES.map((p) => {
+                                    const isSelected = emergencyPriority === p.value;
+                                    return (
+                                        <div
+                                            key={p.value}
+                                            onClick={() => setEmergencyPriority(p.value)}
+                                            style={{
+                                                padding: '10px 14px',
+                                                borderRadius: '10px',
+                                                border: isSelected ? `2px solid ${p.color}` : '1.5px solid #E2E8F0',
+                                                background: isSelected ? p.bgColor : '#FFFFFF',
+                                                cursor: 'pointer',
+                                                transition: 'all 0.2s ease',
+                                                display: 'flex',
+                                                alignItems: 'center',
+                                                gap: '12px',
+                                                boxShadow: isSelected ? `0 2px 12px ${p.bgColor}` : 'none',
+                                            }}
+                                        >
+                                            <div style={{
+                                                width: '32px', height: '32px', borderRadius: '8px',
+                                                background: isSelected ? p.color : '#F1F5F9',
+                                                display: 'flex', alignItems: 'center', justifyContent: 'center',
+                                                fontSize: '0.8rem', transition: 'all 0.2s',
+                                                color: isSelected ? '#fff' : '#94A3B8',
+                                                fontWeight: 800,
+                                            }}>
+                                                {p.tier}
+                                            </div>
+                                            <div style={{ flex: 1 }}>
+                                                <div style={{ fontSize: '0.82rem', fontWeight: 800, color: isSelected ? p.color : '#1E293B' }}>
+                                                    {p.emoji} {p.label}
+                                                </div>
+                                                <div style={{ fontSize: '0.68rem', color: '#94A3B8', marginTop: '1px' }}>
+                                                    {p.description}
+                                                </div>
+                                            </div>
+                                            {isSelected && (
+                                                <div style={{ color: p.color, fontWeight: 700, fontSize: '1rem' }}>✓</div>
+                                            )}
+                                        </div>
+                                    );
+                                })}
+                            </div>
+
                             <label style={{ display: 'block', marginBottom: '0.5rem', fontSize: '0.8rem', fontWeight: 700, color: '#334155', textTransform: 'uppercase', letterSpacing: '0.05em' }}>Enter Patient Location</label>
                             <input 
                                 type="text" 
@@ -1318,6 +1369,8 @@ export default function OperatorDashboard() {
                                 <button 
                                     onClick={() => {
                                         if (assignmentLocation.trim() !== "") {
+                                            const priorityInfo = getPriorityByValue(emergencyPriority);
+                                            const priorityLabel = priorityInfo ? `${priorityInfo.emoji} ${priorityInfo.tier} — ${priorityInfo.label}` : '';
                                             assignAmbulance(selectedAmbulance.id, assignmentLocation);
                                             setSelectedAmbulance(null);
                                         } else {
@@ -1339,6 +1392,7 @@ export default function OperatorDashboard() {
                         </div>
                     </div>
                 )}
+
 
                 {/* 102 Call Modal */}
                 {show102Call && (
@@ -1400,6 +1454,58 @@ export default function OperatorDashboard() {
                                                 style={{ width: '100%', padding: '0.75rem', borderRadius: '8px', border: '1.5px solid #E2E8F0', outline: 'none', fontFamily: "'DM Sans', sans-serif", minHeight: '80px', resize: 'none' }} 
                                             />
                                         </div>
+
+                                        {/* Priority Selector */}
+                                        <div>
+                                            <label style={{ display: 'block', marginBottom: '0.6rem', fontSize: '0.78rem', fontWeight: 700, color: '#334155', textTransform: 'uppercase', letterSpacing: '0.04em' }}>Emergency Priority</label>
+                                            <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                                                {EMERGENCY_PRIORITIES.map((p) => {
+                                                    const isSelected = emergencyPriority === p.value;
+                                                    return (
+                                                        <div
+                                                            key={p.value}
+                                                            onClick={() => setEmergencyPriority(p.value)}
+                                                            style={{
+                                                                padding: '12px 14px',
+                                                                borderRadius: '10px',
+                                                                border: isSelected ? `2px solid ${p.color}` : '1.5px solid #E2E8F0',
+                                                                background: isSelected ? p.bgColor : '#FFFFFF',
+                                                                cursor: 'pointer',
+                                                                transition: 'all 0.2s ease',
+                                                                display: 'flex',
+                                                                alignItems: 'center',
+                                                                gap: '12px',
+                                                                boxShadow: isSelected ? `0 2px 12px ${p.bgColor}` : 'none',
+                                                            }}
+                                                        >
+                                                            <div style={{
+                                                                width: '36px', height: '36px', borderRadius: '10px',
+                                                                background: isSelected ? p.color : '#F1F5F9',
+                                                                display: 'flex', alignItems: 'center', justifyContent: 'center',
+                                                                fontSize: '1rem', transition: 'all 0.2s',
+                                                                color: isSelected ? '#fff' : '#94A3B8',
+                                                                fontWeight: 800,
+                                                            }}>
+                                                                {p.tier}
+                                                            </div>
+                                                            <div style={{ flex: 1 }}>
+                                                                <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                                                                    <span style={{ fontSize: '0.85rem', fontWeight: 800, color: isSelected ? p.color : '#1E293B' }}>
+                                                                        {p.emoji} {p.label}
+                                                                    </span>
+                                                                </div>
+                                                                <div style={{ fontSize: '0.72rem', color: '#94A3B8', marginTop: '2px', lineHeight: 1.3 }}>
+                                                                    {p.description}
+                                                                </div>
+                                                            </div>
+                                                            {isSelected && (
+                                                                <div style={{ color: p.color, fontWeight: 700, fontSize: '1rem' }}>✓</div>
+                                                            )}
+                                                        </div>
+                                                    );
+                                                })}
+                                            </div>
+                                        </div>
                                     </div>
 
                                     <button 
@@ -1420,9 +1526,19 @@ export default function OperatorDashboard() {
                             {callState === "location" && (
                                 <>
                                     <div style={{ background: '#FFF7ED', border: '1.5px solid #FED7AA', padding: '1rem', borderRadius: '10px', marginBottom: '1.5rem' }}>
-                                        <p style={{ margin: 0, color: '#E8571A', fontWeight: 700, fontSize: '0.95rem' }}>
-                                            📍 Caller: <strong>{callerName}</strong> ({callerPhone})
-                                        </p>
+                                        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                                            <p style={{ margin: 0, color: '#E8571A', fontWeight: 700, fontSize: '0.95rem' }}>
+                                                📍 Caller: <strong>{callerName}</strong> ({callerPhone})
+                                            </p>
+                                            {(() => {
+                                                const p = getPriorityByValue(emergencyPriority);
+                                                return p ? (
+                                                    <span style={{ fontSize: '0.7rem', fontWeight: 800, padding: '4px 10px', borderRadius: '8px', background: p.bgColor, color: p.color, border: `1px solid ${p.color}20`, whiteSpace: 'nowrap' }}>
+                                                        {p.emoji} {p.tier}
+                                                    </span>
+                                                ) : null;
+                                            })()}
+                                        </div>
                                     </div>
 
                                     <p style={{ margin: '0 0 1.2rem 0', color: '#64748B', fontSize: '0.95rem' }}>
@@ -1477,12 +1593,24 @@ export default function OperatorDashboard() {
                             {callState === "assigning" && (
                                 <>
                                     <div style={{ background: '#FFF7ED', border: '1.5px solid #FED7AA', padding: '1rem', borderRadius: '10px', marginBottom: '1.5rem' }}>
-                                        <p style={{ margin: '0 0 4px 0', color: '#E8571A', fontWeight: 700, fontSize: '0.9rem' }}>
-                                            📍 {callerName}
-                                        </p>
-                                        <p style={{ margin: 0, color: '#E8571A', fontSize: '0.8rem', fontFamily: "'JetBrains Mono', monospace" }}>
-                                            {patientLocation?.lat.toFixed(4)}, {patientLocation?.lng.toFixed(4)}
-                                        </p>
+                                        <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between' }}>
+                                            <div>
+                                                <p style={{ margin: '0 0 4px 0', color: '#E8571A', fontWeight: 700, fontSize: '0.9rem' }}>
+                                                    📍 {callerName}
+                                                </p>
+                                                <p style={{ margin: 0, color: '#E8571A', fontSize: '0.8rem', fontFamily: "'JetBrains Mono', monospace" }}>
+                                                    {patientLocation?.lat.toFixed(4)}, {patientLocation?.lng.toFixed(4)}
+                                                </p>
+                                            </div>
+                                            {(() => {
+                                                const p = getPriorityByValue(emergencyPriority);
+                                                return p ? (
+                                                    <span style={{ fontSize: '0.7rem', fontWeight: 800, padding: '4px 10px', borderRadius: '8px', background: p.bgColor, color: p.color, border: `1px solid ${p.color}20`, whiteSpace: 'nowrap' }}>
+                                                        {p.emoji} {p.tier} — {p.label}
+                                                    </span>
+                                                ) : null;
+                                            })()}
+                                        </div>
                                     </div>
 
                                     <label style={{ display: 'block', marginBottom: '0.8rem', fontSize: '0.85rem', fontWeight: 700, color: '#334155', textTransform: 'uppercase' }}>
