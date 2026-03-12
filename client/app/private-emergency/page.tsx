@@ -556,82 +556,10 @@ export default function PrivateEmergencyDashboard() {
     setTimeout(() => {
       setAdminApproved(true);
       addLog("✓ Admin approved — corridor granted", "success");
-      activateCorridor();
+      handleActivate(amb);
     }, 2500);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [plateNumber, plateSubmitted]);
-
-  /* ── ACTIVATE CORRIDOR ── */
-  const activateCorridor = useCallback(() => {
-    setSession("active");
-    setElapsed(0);
-    setNearbyCount(0);
-    addLog("Emergency session started", "success");
-    addLog("JWT role verified: PRIVATE P-70", "info");
-    addLog("Requesting fastest route via Directions API…", "info");
-
-    // Create session on backend
-    const API_BASE = process.env.NEXT_PUBLIC_API_URL || "http://localhost:5000/api";
-    const SOCKET_URL = process.env.NEXT_PUBLIC_SOCKET_URL || "http://localhost:5000";
-    const token = typeof window !== "undefined" ? localStorage.getItem("gh_token") : null;
-
-    if (token) {
-      fetch(`${API_BASE}/emergency`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json", "Authorization": `Bearer ${token}` },
-        body: JSON.stringify({ 
-          origin: ORIGIN, 
-          destination: DESTINATION 
-        }),
-      })
-        .then(r => r.json())
-        .then(data => {
-          if (data.session?._id) {
-            setBackendSessionId(data.session._id);
-            addLog(`Backend session: ${data.session._id.slice(-8)}`, "success");
-            socketRef.current = io(`${SOCKET_URL}/tracking`, { transports: ["websocket", "polling"] });
-            socketRef.current.emit("join-session", data.session._id);
-          }
-        })
-        .catch(() => addLog("Backend unavailable — running in simulation mode", "warn"));
-    } else {
-      addLog("No auth token — running in simulation mode", "warn");
-    }
-
-    const startSimulationWithPath = (fullPath: google.maps.LatLng[], distText: string, durText: string) => {
-      routePath.current = fullPath;
-      routeIndex.current = 0;
-
-      setEtaText(durText);
-      setDistText(distText);
-
-      addLog(`Route: ${distText} · ${durText}`, "success");
-      addLog("Green corridor activating (P-70)…", "warn");
-
-      drawCorridor(fullPath);
-      placeVehicle(ORIGIN, 0);
-
-      const bounds = new window.google.maps.LatLngBounds();
-      fullPath.forEach(p => bounds.extend(p));
-      mapObj.current!.fitBounds(bounds, { top: 60, right: 40, bottom: 80, left: 40 });
-
-      setTimeout(() => {
-        addLog("Geo-fence active: 200m radius", "success");
-        addLog("Broadcasting alerts to nearby drivers", "info");
-        setNearbyCount(Math.floor(3 + Math.random() * 5));
-      }, 900);
-
-      if (!selectedHospitalId && hospitals[0]) {
-        setSelectedHospitalId(hospitals[0].id);
-        setDestination({ lat: hospitals[0].location.lat, lng: hospitals[0].location.lng });
-        setDestinationName(hospitals[0].name);
-        addLog(`Auto-selected hospital: ${hospitals[0].name}`, "success");
-      }
-
-      handleActivate(amb);
-      dispatchSocket.disconnect();
-    }, 2500);
-  }, [plateSubmitted, addLog, origin, patientName, patientPhone, plateNumber, severity, hospitals, selectedHospitalId, handleActivate]);
+  }, [plateNumber, plateSubmitted, handleActivate]);
 
   /* ── Request corridor (auto-find nearest ambulance) ── */
   const requestCorridor = useCallback(() => {
