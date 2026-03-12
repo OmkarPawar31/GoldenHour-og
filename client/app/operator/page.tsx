@@ -4,6 +4,7 @@ import { useState, useEffect, useRef, useCallback } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useOperatorTracking, TrackedAmbulance } from "../../hooks/useOperatorTracking";
+import { clearAuth } from "../../utils/auth"; // Added import for clearAuth
 
 // --- Constants ---
 const MAPS_API_KEY = process.env.NEXT_PUBLIC_GOOGLE_MAPS_API_KEY || "";
@@ -64,8 +65,10 @@ export default function OperatorDashboard() {
     useEffect(() => {
         const token = localStorage.getItem("gh_token");
         const role = localStorage.getItem("gh_role");
-        if (token && role === "organizer") {
+        if (token && (role === "organizer" || role === "operator")) {
             setIsLoggedIn(true);
+        } else if (!token) {
+            window.location.replace("/login/operator");
         }
     }, []);
 
@@ -765,13 +768,6 @@ export default function OperatorDashboard() {
     };
 
     const handleLogout = () => {
-        localStorage.removeItem("gh_token");
-        localStorage.removeItem("gh_role");
-        setIsLoggedIn(false);
-        setIsDemoMode(false);
-        setLoginName("");
-        setPassword("");
-        setLoginError("");
         setSearchQuery("");
         setSearchedCenter(null);
         setDemoAmbulances([]);

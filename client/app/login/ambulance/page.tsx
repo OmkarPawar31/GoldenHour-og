@@ -1,8 +1,9 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
+import { saveAuth } from "../../../utils/auth";
 
 const API_BASE = process.env.NEXT_PUBLIC_API_URL || "http://localhost:5000/api";
 const ACCENT   = "#E8571A";
@@ -10,11 +11,22 @@ const ACCENT2  = "#F97316";
 
 export default function AmbulanceLogin() {
   const router = useRouter();
+  const [ready, setReady] = useState(false);
   const [email, setEmail]       = useState("");
   const [password, setPassword] = useState("");
   const [showPw, setShowPw]     = useState(false);
   const [loading, setLoading]   = useState(false);
   const [error, setError]       = useState("");
+
+  useEffect(() => {
+    const token = localStorage.getItem("gh_token");
+    const role  = localStorage.getItem("gh_role");
+    if (token && (role === "driver" || role === "ambulance")) {
+      router.replace("/ambulance");
+      return;
+    }
+    setReady(true);
+  }, [router]);
 
   const handleAuth = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -24,10 +36,12 @@ export default function AmbulanceLogin() {
       const res  = await fetch(`${API_BASE}/auth/login`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ email, password }) });
       const data = await res.json();
       if (!res.ok) throw new Error(data.message || "Authentication failed");
-      localStorage.setItem("gh_token", data.token); localStorage.setItem("gh_role", data.user.role); router.push("/ambulance");
+      saveAuth(data.token, data.user.role); router.push("/ambulance");
     } catch (err: any) { setError(err.message || "Authentication failed"); }
     finally { setLoading(false); }
   };
+
+  if (!ready) return <div style={{ minHeight: '100vh', background: '#FFFBF5', display: 'flex', alignItems: 'center', justifyContent: 'center' }}><div style={{ width: 32, height: 32, borderRadius: '50%', border: '3px solid rgba(232,87,26,0.2)', borderTopColor: '#E8571A', animation: 'spin 0.8s linear infinite' }} /></div>;
 
   return (
     <>

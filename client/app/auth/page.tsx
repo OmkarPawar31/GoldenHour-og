@@ -1,10 +1,11 @@
 "use client";
 
-import { Suspense, useState, useEffect } from "react";
-import Link from "next/link";
+import { useState, useEffect, Suspense } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
+import Link from "next/link";
+import { saveAuth } from "../../utils/auth";
 
-type Role = "ambulance" | "private" | "driver" | "admin" | "hospital";
+type Role = "ambulance" | "hospital" | "admin" | "operator" | null;
 
 
 const ROLES = [
@@ -27,19 +28,22 @@ function AuthContent() {
         const urlMode = searchParams.get("mode");
         const urlRole = searchParams.get("role") as Role;
 
-        // --- Persistence Logic ---
+        // --- Persistence Logic: redirect already-logged-in users to their dashboard ---
         const existingToken = localStorage.getItem("gh_token");
         const existingRole = localStorage.getItem("gh_role");
 
-        // Only auto-redirect if the logged-in role matches the requested role
-        if (existingToken && existingRole && existingRole === urlRole) {
+        if (existingToken && existingRole) {
             const routes: Record<string, string> = {
                 ambulance: "/ambulance",
-                admin: "/admin",
-                hospital: "/hospital",
+                driver:    "/ambulance",
+                admin:     "/admin",
+                hospital:  "/hospital",
+                organizer: "/operator",
+                operator:  "/operator",
             };
-            if (routes[existingRole]) {
-                router.push(routes[existingRole]);
+            const dest = routes[existingRole];
+            if (dest) {
+                router.replace(dest);
                 return;
             }
         }
@@ -50,7 +54,7 @@ function AuthContent() {
             if (urlRole === "admin") {
                 setMode("admin");
             } else if (urlRole === "ambulance") {
-                setMode("login"); // Ambulance drivers are provisioned by hospitals only
+                setMode("login");
             } else if (urlMode === "register") {
                 setMode("register");
             } else {
@@ -79,10 +83,9 @@ function AuthContent() {
             const API_BASE = process.env.NEXT_PUBLIC_API_URL || "http://localhost:5000/api";
 
             if (mode === "register") {
-                const roleMap: Record<Role, string> = {
+                const roleMap: Record<Exclude<Role, null>, string> = {
                     ambulance: "driver",
-                    private: "user",
-                    driver: "driver",
+                    operator: "operator",
                     admin: "admin",
                     hospital: "hospital",
                 };
@@ -117,7 +120,7 @@ function AuthContent() {
                 localStorage.setItem("gh_user", JSON.stringify(data.user));
                 const backendRole = data.user.role;
                 const inferredRole = backendRole === "admin" ? "admin" : backendRole === "driver" ? "ambulance" : backendRole === "hospital" ? "hospital" : "private";
-                localStorage.setItem("gh_role", inferredRole);
+                saveAuth(data.token, inferredRole);
                 if (!selectedRole) setSelectedRole(inferredRole as Role);
             }
 

@@ -5,6 +5,7 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { io, Socket } from "socket.io-client";
 import { useOperatorTracking } from "../../hooks/useOperatorTracking";
+import { clearAuth } from "../../utils/auth";
 
 interface Ambulance {
     id: string;
@@ -76,6 +77,15 @@ export default function HospitalDashboard() {
     const socketRef = useRef<Socket | null>(null);
     const dispatchSocketRef = useRef<Socket | null>(null);
 
+    // ── Auth guard ──
+    useEffect(() => {
+        const token = localStorage.getItem("gh_token");
+        const role  = localStorage.getItem("gh_role");
+        if (!token || role !== "hospital") {
+            window.location.replace("/login/hospital");
+        }
+    }, []);
+
     useEffect(() => {
         const t = setInterval(() => setTime(new Date()), 1000);
         return () => clearInterval(t);
@@ -136,10 +146,8 @@ export default function HospitalDashboard() {
     }, [trackingMode, fleet]);
 
     const handleLogout = () => {
-        localStorage.removeItem("gh_token");
-        localStorage.removeItem("gh_user");
-        localStorage.removeItem("gh_role");
-        router.push("/auth");
+        clearAuth();
+        window.location.replace("/login/hospital");
     };
 
     useEffect(() => {
