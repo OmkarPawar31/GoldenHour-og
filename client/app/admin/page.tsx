@@ -1,11 +1,13 @@
 "use client";
 
 import { useState, useEffect, useCallback, useRef } from "react";
+import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { apiGet } from "../../services/api";
 import { getSocket, disconnectSocket } from "../../services/socket";
 import { useOperatorTracking } from "../../hooks/useOperatorTracking";
 import AdminLiveMap from "../../components/AdminLiveMap";
+import { clearAuth } from "../../utils/auth";
 
 interface DashboardData {
   activeEmergencies: number;
@@ -126,7 +128,7 @@ export default function AdminPage() {
   // Initialize alert sound
   useEffect(() => {
     if (typeof window !== "undefined") {
-      audioRef.current = new Audio("data:audio/wav;base64,UklGRnoGAABXQVZFZm10IBAAAAABAAEAQB8AAEAfAAABAAgAZGF0YQoGAACBhYqFbF1PQ0A+QUNTO2hdUkxJSk1QUlRST0tHREJBQUJDREVGRkdHR0dGRkVEQ0JBQEBBQkNERUZHR0hISEdHRkVEQ0JBQUFCQkNEREVFRkZGRkZFRURDQkFBQUFCQkNERERFRUZGRUVFREREQ0JCQUFBQUJCQ0NEREVERS8tLCsqKSkpKisrLC4vLzAxMTIyMzMzMzMyMjEwLy4tLCsqKiopKSkpKSkpKSkpKSorKywsLS4uLy8wMDExMjIyMjIyMTEwMC8uLS0sKysqKSkpKSkpKSoqKissLC0tLi8vLzAwMTExMTExMTEwMC8vLi4tLCwrKysqKioqKioqKyssLC0tLi4vLy8wMDAwMDAwMDAvLy4uLS0sLCsrKysqKioqKioqKyssLC0tLi4uLy8vMDAwMDAwLy8vLi4tLS0sLCwrKysrKioqKisrKyssLC0tLS4uLi8vLy8wMDAvLy8uLi4tLS0sLCwsKysrKysrKysrKywsLC0tLS4uLi4vLy8vLy8vLy4uLi0tLS0sLCwsLCsrKysrKysrLCwsLC0tLS0uLi4uLy8vLy8vLi4uLi0tLS0tLCwsLCwrKysrKysrLCwsLC0tLS0uLi4uLi8vLy8vLi4uLi0tLS0tLSwsLCwsKysrKysrLCwsLC0tLS0tLi4uLi4vLy8vLi4uLi4tLS0tLSwsLCwsLCwrKysrLCwsLC0tLS0tLS4uLi4uLi4uLi4uLi4tLS0tLS0sLCwsLCwsLCwsLCwsLC0tLS0tLS4uLi4uLi4uLi4uLi0tLS0tLS0sLCwsLCwsLCwsLCwtLS0tLS0tLi4uLi4uLi4uLi4tLS0tLS0tLSwsLCwsLCwsLCwtLS0tLS0tLS4uLi4uLi4uLi4tLS0tLS0tLS0sLCwsLCwsLC0tLS0tLS0tLi4uLi4uLi4uLi0tLS0tLS0tLSwsLCwsLCwtLS0tLS0tLS0uLi4uLi4uLi4tLS0tLS0tLS0tLCwsLCwsLS0tLS0tLS0uLi4uLi4uLi4tLS0tLS0tLS0tLSwsLCwtLS0tLS0tLS0uLi4uLi4uLi0tLS0tLS0tLS0tLSwsLC0tLS0tLS0tLi4uLi4uLi4tLS0tLS0tLS0tLS0sLC0tLS0tLS0tLi4uLi4uLi4tLS0tLS0tLS0tLS0tLS0tLS0tLS0uLi4uLi4uLS0tLS0tLS0tLS0tLS0tLS0tLS0tLi4uLi4uLi0tLS0tLS0tLS0tLS0tLS0tLS0tLS0uLi4uLi4tLS0tLS0tLS0tLS0t");
+      audioRef.current = new Audio("data:audio/wav;base64,UklGRnoGAABXQVZFZm10IBAAAAABAAEAQB8AAEAfAAABAAgAZGF0YQoGAACBhYqFbF1PQ0A+QUNTO2hdUkxJSk1QUlRST0tHREJBQUJDREVGRkdHR0dGRkVEQ0JBQUFCQkNEREVFRkZHR0hISEdHRkVEQ0JBQUFCQkNEREVFRkZGRkZFRURDQkFBQUFCQkNERERFRUZGRUVFREREQ0JCQUFBQUJCQ0NEREVERS8tLCsqKSkpKisrLC4vLzAxMTIyMzMzMzMyMjEwLy4tLCsqKiopKSkpKSkpKSkpKSorKywsLS4uLy8wMDExMjIyMjIyMTEwMC8uLS0sKysqKSkpKSkpKSoqKissLC0tLi8vLzAwMTExMTExMTEwMC8vLi4tLCwrKysqKioqKioqKyssLC0tLi4vLy8wMDAwMDAwMDAvLy4uLS0sLCsrKysqKioqKioqKyssLC0tLi4uLy8vMDAwMDAwLy8vLi4tLS0sLCwrKysrKioqKisrKyssLC0tLS4uLi8vLy8wMDAvLy8uLi4tLS0sLCwsKysrKysrKysrKywsLC0tLS4uLi4vLy8vLy8vLy4uLi0tLS0sLCwsLCsrKysrKysrLCwsLC0tLS0uLi4uLy8vLy8vLi4uLi0tLS0tLCwsLCwrKysrKysrLCwsLC0tLS0uLi4uLi8vLy8vLi4uLi0tLS0tLSwsLCwsKysrKysrLCwsLC0tLS0tLi4uLi4vLy8vLi4uLi4tLS0tLSwsLCwsLCwrKysrLCwsLC0tLS0tLS4uLi4uLi4uLi4uLi4tLS0tLS0sLCwsLCwsLCwsLCwsLC0tLS0tLS4uLi4uLi4uLi4uLi0tLS0tLS0sLCwsLCwsLCwsLCwtLS0tLS0tLi4uLi4uLi4uLi4tLS0tLS0tLSwsLCwsLCwsLCwtLS0tLS0tLS4uLi4uLi4uLi4tLS0tLS0tLS0sLCwsLCwsLC0tLS0tLS0tLS4uLi4uLi4uLi0tLS0tLS0tLS0sLCwsLCwsLS0tLS0tLS0uLi4uLi4uLi4tLS0tLS0tLS0tLSwsLCwtLS0tLS0tLS0uLi4uLi4uLi0tLS0tLS0tLS0tLSwsLC0tLS0tLS0tLi4uLi4uLi4tLS0tLS0tLS0tLS0sLC0tLS0tLS0tLi4uLi4uLi4tLS0tLS0tLS0tLS0tLS0tLS0tLS0uLi4uLi4uLS0tLS0tLS0tLS0tLS0tLS0tLS0tLi4uLi4uLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0uLi4uLi4tLS0tLS0tLS0tLS0t");
     }
   }, []);
 
@@ -220,8 +222,10 @@ export default function AdminPage() {
       try {
         const token = localStorage.getItem("gh_token");
         const role = localStorage.getItem("gh_role");
-        if (!token) { setError("Not logged in"); setLoading(false); return; }
-        if (role !== "admin") { setError("Admin access required"); setLoading(false); return; }
+        if (!token || role !== "admin") {
+          window.location.replace("/login/admin");
+          return;
+        }
         await loadOverview();
       } catch (err: unknown) {
         setError(err instanceof Error ? err.message : "Failed to load admin data");
@@ -237,13 +241,11 @@ export default function AdminPage() {
     if (tab === "sessions") loadSessions().catch(() => { });
   }, [tab, loadUsers, loadSessions, users.length]);
 
-  function handleLogout() {
-    localStorage.removeItem("gh_token");
-    localStorage.removeItem("gh_user");
-    localStorage.removeItem("gh_role");
+  const handleLogout = () => {
+    clearAuth();
     disconnectSocket("/admin-alerts");
-    window.location.href = "/auth";
-  }
+    window.location.replace("/login/admin");
+  };
 
   function clearAlerts() {
     setAlerts([]);

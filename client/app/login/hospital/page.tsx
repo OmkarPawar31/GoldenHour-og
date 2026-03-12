@@ -1,8 +1,9 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
+import { saveAuth } from "../../../utils/auth";
 
 const API_BASE = process.env.NEXT_PUBLIC_API_URL || "http://localhost:5000/api";
 const ACCENT   = "#3B82F6";
@@ -10,6 +11,7 @@ const ACCENT2  = "#6366F1";
 
 export default function HospitalLogin() {
   const router = useRouter();
+  const [ready, setReady] = useState(false);
   const [tab, setTab]           = useState<"login" | "register">("login");
   const [name, setName]         = useState("");
   const [email, setEmail]       = useState("");
@@ -21,6 +23,16 @@ export default function HospitalLogin() {
   const [success, setSuccess]   = useState("");
 
   const resetForm = () => { setName(""); setEmail(""); setPassword(""); setHospital(""); setError(""); setSuccess(""); };
+
+  useEffect(() => {
+    const token = localStorage.getItem("gh_token");
+    const role  = localStorage.getItem("gh_role");
+    if (token && role === "hospital") {
+      router.replace("/hospital");
+      return;
+    }
+    setReady(true);
+  }, [router]);
 
   const handleAuth = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -35,13 +47,15 @@ export default function HospitalLogin() {
       const data = await res.json();
       if (!res.ok) throw new Error(data.message || "Authentication failed");
       if (tab === "register") {
-        setSuccess("Account created!"); setTimeout(() => { localStorage.setItem("gh_token", data.token); localStorage.setItem("gh_role", "hospital"); router.push("/hospital"); }, 1000);
+        setSuccess("Account created!"); setTimeout(() => { saveAuth(data.token, "hospital"); router.push("/hospital"); }, 1000);
       } else {
-        localStorage.setItem("gh_token", data.token); localStorage.setItem("gh_role", data.user?.role || "hospital"); router.push("/hospital");
+        saveAuth(data.token, data.user?.role || "hospital"); router.push("/hospital");
       }
     } catch (err: any) { setError(err.message || "Authentication failed"); }
     finally { setLoading(false); }
   };
+
+  if (!ready) return <div style={{ minHeight: '100vh', background: '#FFFBF5', display: 'flex', alignItems: 'center', justifyContent: 'center' }}><div style={{ width: 32, height: 32, borderRadius: '50%', border: '3px solid rgba(59,130,246,0.2)', borderTopColor: '#3B82F6', animation: 'spin 0.8s linear infinite' }} /></div>;
 
   return (
     <>

@@ -3,6 +3,7 @@
 import { useState, useEffect } from "react";
 import Link from "next/link";
 import { apiGet } from "../../services/api";
+import { clearAuth } from "../../utils/auth";
 
 interface UserProfile {
   _id: string;
@@ -57,9 +58,7 @@ export default function DashboardPage() {
   }, []);
 
   function handleLogout() {
-    localStorage.removeItem("gh_token");
-    localStorage.removeItem("gh_user");
-    localStorage.removeItem("gh_role");
+    clearAuth();
     window.location.href = "/auth";
   }
 

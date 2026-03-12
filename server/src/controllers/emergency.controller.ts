@@ -9,7 +9,11 @@ import { broadcastAlert } from "../services/notificationService";
 
 export async function createEmergency(req: AuthRequest, res: Response) {
   try {
-    const { origin, destination, vehicleId } = req.body;
+    const { 
+      origin, 
+      destination, 
+      vehicleId
+    } = req.body;
     const userId = req.user!.id;
 
     if (!origin?.lat || !origin?.lng) {
@@ -30,7 +34,7 @@ export async function createEmergency(req: AuthRequest, res: Response) {
       status: "active",
       priority,
       origin,
-      destination: destination || null,
+      destination: destination || null
     });
 
     // Compute route if destination provided
@@ -161,7 +165,13 @@ export async function resolveEmergency(req: AuthRequest, res: Response) {
 
 export async function create102CallEmergency(req: AuthRequest, res: Response) {
   try {
-    const { callerPhone, callerLocation, callerName, priority, details } = req.body;
+    const { 
+      callerPhone, 
+      callerLocation, 
+      callerName, 
+      priority, 
+      details
+    } = req.body;
     const operatorId = req.user!.id;
 
     // Validate required fields
@@ -181,7 +191,7 @@ export async function create102CallEmergency(req: AuthRequest, res: Response) {
       callerName: callerName || "Unknown Caller",
       callDetails: details || "",
       callReceivedAt: new Date(),
-      source: "102-call",
+      source: "102-call"
     });
 
     // Notify all operators about new 102 call
@@ -239,6 +249,12 @@ export async function assignAmbulanceToEmergency(req: AuthRequest, res: Response
 
     // Update the session and return it with vehicle info
     const updatedSession = await session.populate("vehicleId");
+
+    // Broadcast the assignment to all operators/dashboards
+    broadcastAlert(
+      `🚑 Ambulance ${(updatedSession.vehicleId as any)?.plateNumber || 'assigned'} is now en route to patient.`,
+      id
+    );
 
     res.json({ 
       success: true,

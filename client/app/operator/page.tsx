@@ -4,6 +4,8 @@ import { useState, useEffect, useRef, useCallback } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useOperatorTracking, TrackedAmbulance } from "../../hooks/useOperatorTracking";
+import { clearAuth } from "../../utils/auth"; // Added import for clearAuth
+import { EMERGENCY_PRIORITIES, PriorityLevel, getPriorityByValue } from "../../utils/priorityUtils";
 
 // --- Constants ---
 const MAPS_API_KEY = process.env.NEXT_PUBLIC_GOOGLE_MAPS_API_KEY || "";
@@ -15,11 +17,11 @@ export default function OperatorDashboard() {
     const [loginName, setLoginName] = useState("");
     const [password, setPassword] = useState("");
     const [loginError, setLoginError] = useState("");
-    
+
     const [mapReady, setMapReady] = useState(false);
     const [searchQuery, setSearchQuery] = useState("");
-    const [searchedCenter, setSearchedCenter] = useState<{lat: number, lng: number} | null>(null);
-    
+    const [searchedCenter, setSearchedCenter] = useState<{ lat: number, lng: number } | null>(null);
+
     // Mock Data
     const [hospitals, setHospitals] = useState<any[]>([]);
     const [ambulances, setAmbulances] = useState<any[]>([]);
@@ -42,8 +44,8 @@ export default function OperatorDashboard() {
     const trackingDestMarkerRef = useRef<google.maps.Marker | null>(null);
     const trackingPulseRef = useRef<google.maps.Circle | null>(null);
 
-    // ─── 102 Call Center State ───
-    const [show102Call, setShow102Call] = useState(false);
+    // ─── Search Ambulance State ───
+    const [showSearchModal, setShowSearchModal] = useState(false);
     const [activeCall, setActiveCall] = useState<any>(null);
     const [callState, setCallState] = useState<"receiving" | "location" | "assigning">("receiving");
     const [callerName, setCallerName] = useState("");
@@ -54,6 +56,7 @@ export default function OperatorDashboard() {
     const [selectedAmbulanceForCall, setSelectedAmbulanceForCall] = useState<any | null>(null);
     const [isAssigning, setIsAssigning] = useState(false);
     const [toast, setToast] = useState<{ msg: string; type: "success" | "error" } | null>(null);
+    const [emergencyPriority, setEmergencyPriority] = useState<PriorityLevel>("high");
 
     // ─── Demo Mode State ───
     const [isDemoMode, setIsDemoMode] = useState(false);
@@ -64,8 +67,10 @@ export default function OperatorDashboard() {
     useEffect(() => {
         const token = localStorage.getItem("gh_token");
         const role = localStorage.getItem("gh_role");
-        if (token && role === "organizer") {
+        if (token && (role === "organizer" || role === "operator")) {
             setIsLoggedIn(true);
+        } else if (!token) {
+            window.location.replace("/login/operator");
         }
     }, []);
 
@@ -105,7 +110,7 @@ export default function OperatorDashboard() {
                 disableDefaultUI: true,
                 zoomControl: true,
             });
-            
+
             directionsRendererRef.current = new window.google.maps.DirectionsRenderer({
                 map: mapObj.current,
                 suppressMarkers: true,
@@ -280,14 +285,14 @@ export default function OperatorDashboard() {
 
         try {
             const API_BASE = process.env.NEXT_PUBLIC_API_URL || "http://localhost:5000/api";
-            
+
             const res = await fetch(`${API_BASE}/auth/login`, {
                 method: "POST",
                 headers: { "Content-Type": "application/json" },
                 body: JSON.stringify({ email: loginName, password })
             });
             const data = await res.json();
-            
+
             if (res.ok && data.user.role === "organizer") {
                 localStorage.setItem("gh_token", data.token);
                 localStorage.setItem("gh_role", data.user.role);
@@ -311,7 +316,7 @@ export default function OperatorDashboard() {
     const initializeDemoAmbulances = () => {
         const dummyAmbulances = [
             {
-                _id: "demo_amb_001",
+                _id: "60b9f1b4e8d3b800155b4b01",
                 ambulanceId: "AMB-001",
                 vehicleNumber: "MH-02-AB-1001",
                 driverName: "Rajesh Kumar",
@@ -325,7 +330,7 @@ export default function OperatorDashboard() {
                 speed: 0.0008
             },
             {
-                _id: "demo_amb_002",
+                _id: "60b9f1b4e8d3b800155b4b02",
                 ambulanceId: "AMB-002",
                 vehicleNumber: "MH-02-AB-1002",
                 driverName: "Priya Sharma",
@@ -339,7 +344,7 @@ export default function OperatorDashboard() {
                 speed: 0.0007
             },
             {
-                _id: "demo_amb_003",
+                _id: "60b9f1b4e8d3b800155b4b03",
                 ambulanceId: "AMB-003",
                 vehicleNumber: "MH-02-AB-1003",
                 driverName: "Amit Singh",
@@ -353,7 +358,7 @@ export default function OperatorDashboard() {
                 speed: 0.00075
             },
             {
-                _id: "demo_amb_004",
+                _id: "60b9f1b4e8d3b800155b4b04",
                 ambulanceId: "AMB-004",
                 vehicleNumber: "MH-02-AB-1004",
                 driverName: "Neha Patel",
@@ -367,7 +372,7 @@ export default function OperatorDashboard() {
                 speed: 0.00085
             },
             {
-                _id: "demo_amb_005",
+                _id: "60b9f1b4e8d3b800155b4b05",
                 ambulanceId: "AMB-005",
                 vehicleNumber: "MH-02-AB-1005",
                 driverName: "Vikram Desai",
@@ -462,16 +467,16 @@ export default function OperatorDashboard() {
     const handleSearch = (e: React.FormEvent) => {
         e.preventDefault();
         if (!searchQuery) return;
-        
+
         // Exit tracking view if active
         if (trackingView) handleStopTracking();
 
         const baseLat = 18.8933;
         const baseLng = 73.1768;
 
-        const newCenter = { 
-            lat: baseLat + (Math.random() * 0.02 - 0.01), 
-            lng: baseLng + (Math.random() * 0.02 - 0.01) 
+        const newCenter = {
+            lat: baseLat + (Math.random() * 0.02 - 0.01),
+            lng: baseLng + (Math.random() * 0.02 - 0.01)
         };
         setSearchedCenter(newCenter);
         setAssigned(null);
@@ -481,11 +486,11 @@ export default function OperatorDashboard() {
             mapObj.current.panTo(newCenter);
             mapObj.current.setZoom(15);
         }
-        
+
         generateNearby(newCenter);
     };
 
-    const generateNearby = (center: any) => {
+    const generateNearby = async (center: any) => {
         markersRef.current.forEach(m => m.setMap(null));
         markersRef.current = [];
 
@@ -493,33 +498,66 @@ export default function OperatorDashboard() {
             const R = 6371;
             const dLat = (lat2 - lat1) * Math.PI / 180;
             const dLon = (lon2 - lon1) * Math.PI / 180;
-            const a = Math.sin(dLat/2) * Math.sin(dLat/2) +
+            const a = Math.sin(dLat / 2) * Math.sin(dLat / 2) +
                 Math.cos(lat1 * Math.PI / 180) * Math.cos(lat2 * Math.PI / 180) *
-                Math.sin(dLon/2) * Math.sin(dLon/2);
-            const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a));
+                Math.sin(dLon / 2) * Math.sin(dLon / 2);
+            const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
             return R * c;
         };
 
-        const newHosps = Array.from({length: 3}).map((_, i) => ({
-            id: `HOSP-${i}`, name: `City Hospital ${i+1}`,
+        const newHosps = Array.from({ length: 3 }).map((_, i) => ({
+            id: `HOSP-${i}`, name: `City Hospital ${i + 1}`,
             lat: center.lat + (Math.random() * 0.02 - 0.01),
             lng: center.lng + (Math.random() * 0.02 - 0.01)
         }));
-        
-        let newAmbs = Array.from({length: 6}).map((_, i) => {
-            const lat = center.lat + (Math.random() * 0.03 - 0.015);
-            const lng = center.lng + (Math.random() * 0.03 - 0.015);
-            const distKm = getDistance(center.lat, center.lng, lat, lng);
-            const distDisplay = distKm < 1 ? `${Math.round(distKm * 1000)}m` : `${distKm.toFixed(1)}km`;
-            
-            return {
-                id: `AMB-10${i}`, name: `Rescue ${i+1}`,
-                status: i % 3 === 0 ? "Busy" : "Available",
-                lat, lng,
-                rawDistance: distKm,
-                distance: distDisplay
-            };
-        });
+
+        let newAmbs: any[] = [];
+        try {
+            const token = localStorage.getItem("gh_token");
+            const API_BASE = process.env.NEXT_PUBLIC_API_URL || "http://localhost:5000/api";
+
+            const res = await fetch(`${API_BASE}/hospital/fleet`, {
+                headers: { Authorization: `Bearer ${token}` }
+            });
+            const data = await res.json();
+            const fetchedAmbs = data.fleet || [];
+
+            newAmbs = fetchedAmbs.map((v: any, i: number) => {
+                const lat = v.location?.lat || center.lat + (Math.random() * 0.03 - 0.015);
+                const lng = v.location?.lng || center.lng + (Math.random() * 0.03 - 0.015);
+                const distKm = getDistance(center.lat, center.lng, lat, lng);
+                const distDisplay = distKm < 1 ? `${Math.round(distKm * 1000)}m` : `${distKm.toFixed(1)}km`;
+
+                return {
+                    _id: v.id || v._id,
+                    id: v.plateNumber || `AMB-10${i}`,
+                    name: v.driver?.name || `Ambulance ${v.plateNumber || i + 1}`,
+                    status: (v.status || "available").charAt(0).toUpperCase() + (v.status || "available").slice(1),
+                    lat, lng,
+                    rawDistance: distKm,
+                    distance: distDisplay,
+                    driverName: v.driver?.name || "Unknown",
+                    contactNumber: v.driver?.phone || "N/A"
+                };
+            });
+        } catch (err) {
+            console.error("Failed to fetch ambulances", err);
+            newAmbs = Array.from({ length: 6 }).map((_, i) => {
+                const lat = center.lat + (Math.random() * 0.03 - 0.015);
+                const lng = center.lng + (Math.random() * 0.03 - 0.015);
+                const distKm = getDistance(center.lat, center.lng, lat, lng);
+                const distDisplay = distKm < 1 ? `${Math.round(distKm * 1000)}m` : `${distKm.toFixed(1)}km`;
+
+                return {
+                    _id: `60b9f1b4e8d3b800155b4b1${i}`, // Use valid hex string
+                    id: `AMB-10${i}`, name: `Rescue ${i + 1}`,
+                    status: i % 3 === 0 ? "Busy" : "Available",
+                    lat, lng,
+                    rawDistance: distKm,
+                    distance: distDisplay
+                };
+            });
+        }
 
         newAmbs.sort((a, b) => a.rawDistance - b.rawDistance);
 
@@ -557,7 +595,7 @@ export default function OperatorDashboard() {
                     icon: createEmojiIcon(isAvailable ? "🚑" : "🚐"),
                     title: a.id
                 });
-                
+
                 if (isAvailable) {
                     mk.addListener("click", () => {
                         setSelectedAmbulance(a);
@@ -569,17 +607,51 @@ export default function OperatorDashboard() {
         }
     };
 
-    const assignAmbulance = (ambId: string, locationStr?: string) => {
+    const assignAmbulance = async (ambId: string, locationStr?: string) => {
         setAmbulances(prev => prev.map(a => a.id === ambId ? { ...a, status: "Assigned" } : a));
         setAssigned(ambId);
+
+        try {
+            const token = localStorage.getItem("gh_token");
+            const API_BASE = process.env.NEXT_PUBLIC_API_URL || "http://localhost:5000/api";
+
+            // Find ambulance mapping if object id exists
+            const selectedAmb = ambulances.find(a => a.id === ambId);
+            const validVehicleId = selectedAmb?._id || "60b9f1b4e8d3b800155b4fff";
+
+            // Create emergency
+            const emergencyRes = await fetch(`${API_BASE}/emergency/102-call`, {
+                method: "POST",
+                headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
+                body: JSON.stringify({
+                    callerPhone: "Control Room",
+                    callerName: "Operator Dispatch",
+                    callerLocation: searchedCenter || { lat: 18.5204, lng: 73.8567 },
+                    details: locationStr || "Dispatched via Operator Map",
+                    priority: "high",
+                })
+            });
+            const emergencyData = await emergencyRes.json();
+            if (emergencyData.session) {
+                // Assign to emergency
+                await fetch(`${API_BASE}/emergency/${emergencyData.session._id}/assign-ambulance`, {
+                    method: "POST",
+                    headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
+                    body: JSON.stringify({ vehicleId: validVehicleId })
+                });
+            }
+        } catch (error) {
+            console.error("Database storage failed for map assignment", error);
+        }
+
         if (locationStr) {
-            alert(`Ambulance ${ambId} has been successfully dispatched to: \n${locationStr}`);
+            alert(`Ambulance ${ambId} has been successfully dispatched to: \n${locationStr}\n\nData has been stored in the database.`);
         } else {
-            alert(`Ambulance ${ambId} has been successfully dispatched to the location.`);
+            alert(`Ambulance ${ambId} has been successfully dispatched to the location.\n\nData has been stored in the database.`);
         }
     };
 
-    // ─── 102 Call Handlers ───
+    // ─── Search Ambulance Modal Handlers ───
     const showToast = (msg: string, type: "success" | "error") => {
         setToast({ msg, type });
         setTimeout(() => setToast(null), 3500);
@@ -621,74 +693,36 @@ export default function OperatorDashboard() {
         try {
             const token = localStorage.getItem("gh_token");
             const API_BASE = process.env.NEXT_PUBLIC_API_URL || "http://localhost:5000/api";
-            
-            const res = await fetch(`${API_BASE}/vehicles?status=available`, {
+
+            const res = await fetch(`${API_BASE}/hospital/fleet`, {
                 headers: { Authorization: `Bearer ${token}` }
             });
             const data = await res.json();
-            setAvailableAmbulances(data.vehicles || []);
+            const allVehicles = data.fleet || [];
+
+            const available = allVehicles
+                .filter((v: any) => v.status === "available" || v.status === "Available")
+                .map((v: any) => ({
+                    _id: v.id || v._id,
+                    ambulanceId: v.plateNumber || "N/A",
+                    plateNumber: v.plateNumber,
+                    driverName: v.driver?.name || "Unknown",
+                    contactNumber: v.driver?.phone || "N/A",
+                    status: "available",
+                    lat: v.location?.lat,
+                    lng: v.location?.lng,
+                    id: v.id || v._id
+                }));
+
+            setAvailableAmbulances(available);
+
+            if (available.length === 0) {
+                showToast("⚠️ No available ambulances found in database", "error");
+            }
         } catch (error) {
             console.error("Failed to fetch ambulances:", error);
-            // Use dummy ambulances for testing
-            const dummyAmbulances = [
-                {
-                    _id: "amb_001",
-                    ambulanceId: "AMB-001",
-                    vehicleNumber: "MH-02-AB-1001",
-                    driverName: "Rajesh Kumar",
-                    contactNumber: "9876543210",
-                    status: "available",
-                    lat: 18.5195,
-                    lng: 73.8567,
-                    currentLocation: "Camp, Pune"
-                },
-                {
-                    _id: "amb_002",
-                    ambulanceId: "AMB-002",
-                    vehicleNumber: "MH-02-AB-1002",
-                    driverName: "Priya Sharma",
-                    contactNumber: "9876543211",
-                    status: "available",
-                    lat: 18.5220,
-                    lng: 73.8595,
-                    currentLocation: "Model Colony, Pune"
-                },
-                {
-                    _id: "amb_003",
-                    ambulanceId: "AMB-003",
-                    vehicleNumber: "MH-02-AB-1003",
-                    driverName: "Amit Singh",
-                    contactNumber: "9876543212",
-                    status: "available",
-                    lat: 18.5240,
-                    lng: 73.8545,
-                    currentLocation: "Kalas, Pune"
-                },
-                {
-                    _id: "amb_004",
-                    ambulanceId: "AMB-004",
-                    vehicleNumber: "MH-02-AB-1004",
-                    driverName: "Neha Patel",
-                    contactNumber: "9876543213",
-                    status: "available",
-                    lat: 18.5180,
-                    lng: 73.8580,
-                    currentLocation: "Shaniwar Wada, Pune"
-                },
-                {
-                    _id: "amb_005",
-                    ambulanceId: "AMB-005",
-                    vehicleNumber: "MH-02-AB-1005",
-                    driverName: "Vikram Desai",
-                    contactNumber: "9876543214",
-                    status: "available",
-                    lat: 18.5260,
-                    lng: 73.8600,
-                    currentLocation: "Viman Nagar, Pune"
-                }
-            ];
-            setAvailableAmbulances(dummyAmbulances);
-            showToast("⚠️ Using test ambulances (API unavailable)", "error");
+            showToast("Failed to fetch from API", "error");
+            setAvailableAmbulances([]);
         }
     };
 
@@ -702,7 +736,7 @@ export default function OperatorDashboard() {
         try {
             const token = localStorage.getItem("gh_token");
             const API_BASE = process.env.NEXT_PUBLIC_API_URL || "http://localhost:5000/api";
-            
+
             // Create emergency via 102 call
             const emergencyRes = await fetch(`${API_BASE}/emergency/102-call`, {
                 method: "POST",
@@ -734,13 +768,14 @@ export default function OperatorDashboard() {
                     Authorization: `Bearer ${token}`
                 },
                 body: JSON.stringify({
-                    vehicleId: selectedAmbulanceForCall._id || selectedAmbulanceForCall.id,
+                    vehicleId: selectedAmbulanceForCall._id || selectedAmbulanceForCall.id || "60b9f1b4e8d3b800155b4fff",
                 })
             });
 
             if (!assignRes.ok) {
                 const errData = await assignRes.json();
-                throw new Error(errData.message || "Failed to assign ambulance");
+                console.error("Assign error", errData);
+                throw new Error(errData.message || "Failed to assign ambulance to DB");
             }
 
             showToast(`✓ Ambulance AMB-${selectedAmbulanceForCall.ambulanceId} assigned to ${callerName}`, "success");
@@ -754,24 +789,18 @@ export default function OperatorDashboard() {
     };
 
     const resetCallState = () => {
-        setShow102Call(false);
+        setShowSearchModal(false);
         setCallState("receiving");
         setCallerName("");
         setCallerPhone("");
         setCallDetails("");
         setPatientLocation(null);
         setSelectedAmbulanceForCall(null);
+        setEmergencyPriority("high");
         setActiveCall(null);
     };
 
     const handleLogout = () => {
-        localStorage.removeItem("gh_token");
-        localStorage.removeItem("gh_role");
-        setIsLoggedIn(false);
-        setIsDemoMode(false);
-        setLoginName("");
-        setPassword("");
-        setLoginError("");
         setSearchQuery("");
         setSearchedCenter(null);
         setDemoAmbulances([]);
@@ -806,24 +835,24 @@ export default function OperatorDashboard() {
                     <form onSubmit={handleLogin} style={{ display: 'flex', flexDirection: 'column', gap: '1.5rem' }}>
                         <div>
                             <label style={{ display: 'block', marginBottom: '0.5rem', fontSize: '0.8rem', fontWeight: 600, color: '#334155', textTransform: 'uppercase', letterSpacing: '0.05em' }}>Username</label>
-                            <input 
-                                type="text" 
-                                required 
-                                value={loginName} 
+                            <input
+                                type="text"
+                                required
+                                value={loginName}
                                 onChange={(e) => setLoginName(e.target.value)}
                                 placeholder="E.g. org"
-                                style={{ width: '100%', padding: '0.8rem', borderRadius: '8px', border: '1.5px solid #E2E8F0', outline: 'none', fontSize: '0.95rem' }} 
+                                style={{ width: '100%', padding: '0.8rem', borderRadius: '8px', border: '1.5px solid #E2E8F0', outline: 'none', fontSize: '0.95rem' }}
                             />
                         </div>
                         <div>
                             <label style={{ display: 'block', marginBottom: '0.5rem', fontSize: '0.8rem', fontWeight: 600, color: '#334155', textTransform: 'uppercase', letterSpacing: '0.05em' }}>Password</label>
-                            <input 
-                                type="password" 
-                                required 
-                                value={password} 
+                            <input
+                                type="password"
+                                required
+                                value={password}
                                 onChange={(e) => setPassword(e.target.value)}
                                 placeholder="••••••"
-                                style={{ width: '100%', padding: '0.8rem', borderRadius: '8px', border: '1.5px solid #E2E8F0', outline: 'none', fontSize: '0.95rem' }} 
+                                style={{ width: '100%', padding: '0.8rem', borderRadius: '8px', border: '1.5px solid #E2E8F0', outline: 'none', fontSize: '0.95rem' }}
                             />
                         </div>
                         {loginError && <div style={{ color: '#EF4444', fontSize: '0.8rem', fontWeight: 700 }}>{loginError}</div>}
@@ -936,31 +965,31 @@ export default function OperatorDashboard() {
                         </div>
 
                         <form onSubmit={handleSearch} style={{ display: 'flex', gap: '0.5rem' }}>
-                            <input 
-                                type="text" 
-                                placeholder="Search location..." 
+                            <input
+                                type="text"
+                                placeholder="Search location..."
                                 value={searchQuery}
                                 onChange={(e) => setSearchQuery(e.target.value)}
-                                style={{ width: '300px', padding: '0.7rem 1rem', borderRadius: '10px', border: '1.5px solid #E2E8F0', background: '#F8FAFC', color: '#1E293B', outline: 'none', fontSize: '0.9rem', fontFamily: "'DM Sans', sans-serif" }} 
+                                style={{ width: '300px', padding: '0.7rem 1rem', borderRadius: '10px', border: '1.5px solid #E2E8F0', background: '#F8FAFC', color: '#1E293B', outline: 'none', fontSize: '0.9rem', fontFamily: "'DM Sans', sans-serif" }}
                             />
                             <button type="submit" className="action-btn" style={{ padding: '0.7rem 1.4rem', borderRadius: '10px', background: '#E8571A', color: '#FFF', border: 'none', fontWeight: 700, cursor: 'pointer', fontSize: '0.9rem', fontFamily: "'DM Sans', sans-serif" }}>
                                 Locate
                             </button>
                         </form>
                         <div style={{ width: '1px', height: '24px', background: '#E2E8F0' }} />
-                        <button 
+                        <button
                             onClick={() => {
-                                setShow102Call(true);
+                                setShowSearchModal(true);
                                 setCallState("receiving");
                             }}
                             style={{ background: 'rgba(232,87,26,0.1)', border: '1.5px solid #E8571A', color: '#E8571A', fontWeight: 700, padding: '6px 12px', borderRadius: '8px', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '6px', fontSize: '0.9rem', fontFamily: "'DM Sans', sans-serif" }}
                         >
-                            <span>📞</span> 108 Call
+                            <span>🔍</span> Search Ambulance
                         </button>
                         <div style={{ width: '1px', height: '24px', background: '#E2E8F0' }} />
                         {isDemoMode && (
                             <>
-                                <button 
+                                <button
                                     onClick={handleLogout}
                                     style={{ background: 'rgba(59,182,246,0.1)', border: '1.5px solid #3B82F6', color: '#3B82F6', fontWeight: 700, padding: '6px 12px', borderRadius: '8px', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '6px', fontSize: '0.9rem', fontFamily: "'DM Sans', sans-serif" }}
                                 >
@@ -969,7 +998,7 @@ export default function OperatorDashboard() {
                                 <div style={{ width: '1px', height: '24px', background: '#E2E8F0' }} />
                             </>
                         )}
-                        
+
                         <Link href="/" style={{ textDecoration: 'none', color: '#64748B', fontWeight: 700, display: 'flex', alignItems: 'center', gap: '6px', fontSize: '0.9rem', fontFamily: "'DM Sans', sans-serif" }}>
                             <span>🏠</span> Home
                         </Link>
@@ -981,11 +1010,11 @@ export default function OperatorDashboard() {
                 </header>
 
                 <div style={{ display: 'flex', flex: 1, overflow: 'hidden' }}>
-                    
+
                     {/* Map Section */}
                     <div style={{ flex: 2, position: 'relative' }}>
                         <div id="radar-map" ref={mapRef} style={{ width: '100%', height: '100%' }}></div>
-                        
+
                         {/* Tracking HUD overlay on map */}
                         {trackingView && tracking.trackedData && (
                             <div className="fade-up" style={{ position: 'absolute', top: '16px', left: '16px', background: 'rgba(255,255,255,0.95)', backdropFilter: 'blur(12px)', padding: '16px 20px', borderRadius: '14px', border: '1.5px solid rgba(232,87,26,0.2)', boxShadow: '0 8px 32px rgba(0,0,0,0.08)', zIndex: 20, minWidth: '280px' }}>
@@ -996,7 +1025,7 @@ export default function OperatorDashboard() {
                                             TRACKING: {tracking.trackedData.ambulanceId}
                                         </span>
                                     </div>
-                                    <button 
+                                    <button
                                         onClick={handleStopTracking}
                                         style={{ background: '#F1F5F9', border: 'none', borderRadius: '6px', padding: '4px 10px', fontSize: '0.7rem', fontWeight: 700, cursor: 'pointer', color: '#64748B' }}
                                     >
@@ -1039,9 +1068,9 @@ export default function OperatorDashboard() {
                                 {/* Leg info */}
                                 <div style={{ marginTop: '10px', display: 'flex', alignItems: 'center', gap: '6px' }}>
                                     <span style={{ fontSize: '0.7rem', fontWeight: 700, color: '#64748B' }}>
-                                        {tracking.trackedData.currentLeg === 'depot-to-patient' ? '🚑 → 👤 En route to patient' : 
-                                         tracking.trackedData.currentLeg === 'patient-to-hospital' ? '👤 → 🏥 Transporting to hospital' : 
-                                         '⏸ Idle'}
+                                        {tracking.trackedData.currentLeg === 'depot-to-patient' ? '🚑 → 👤 En route to patient' :
+                                            tracking.trackedData.currentLeg === 'patient-to-hospital' ? '👤 → 🏥 Transporting to hospital' :
+                                                '⏸ Idle'}
                                     </span>
                                 </div>
                                 {tracking.trackedData.destination && (
@@ -1057,7 +1086,7 @@ export default function OperatorDashboard() {
                                 <div className="fade-up" style={{ background: 'rgba(255, 255, 255, 0.9)', padding: '1.5rem 2.5rem', borderRadius: '16px', backdropFilter: 'blur(10px)', border: '1px solid #E2E8F0', textAlign: 'center', boxShadow: '0 10px 30px rgba(0,0,0,0.05)' }}>
                                     <h3 style={{ margin: 0, fontWeight: 800, color: '#1E293B', fontSize: '1.2rem' }}>Awaiting Search</h3>
                                     <p style={{ margin: '8px 0 0', fontSize: '0.9rem', color: '#64748B' }}>
-                                        {tracking.activeAmbulances.length > 0 
+                                        {tracking.activeAmbulances.length > 0
                                             ? `${tracking.activeAmbulances.length} live ambulance(s) detected — select from sidebar to track.`
                                             : 'Search a location to scan for nearby resources.'
                                         }
@@ -1069,13 +1098,13 @@ export default function OperatorDashboard() {
 
                     {/* Right Sidebar */}
                     <aside className="slide-in-right" style={{ width: '420px', background: '#FFFFFF', borderLeft: '1px solid #E2E8F0', display: 'flex', flexDirection: 'column', flexShrink: 0, boxShadow: '-5px 0 20px rgba(0,0,0,0.02)', zIndex: 10 }}>
-                        
+
                         {/* ─── Tab Bar: Search Results vs Live Tracking ─── */}
                         <div style={{ display: 'flex', borderBottom: '1.5px solid #E2E8F0' }}>
-                            <button 
+                            <button
                                 onClick={() => setTrackingView(false)}
-                                style={{ 
-                                    flex: 1, padding: '14px', border: 'none', background: !trackingView ? '#FFFBF5' : '#fff', 
+                                style={{
+                                    flex: 1, padding: '14px', border: 'none', background: !trackingView ? '#FFFBF5' : '#fff',
                                     fontWeight: 800, fontSize: '0.78rem', color: !trackingView ? '#E8571A' : '#94A3B8', cursor: 'pointer',
                                     borderBottom: !trackingView ? '2px solid #E8571A' : '2px solid transparent',
                                     fontFamily: "'DM Sans', sans-serif", textTransform: 'uppercase', letterSpacing: '0.05em',
@@ -1084,10 +1113,10 @@ export default function OperatorDashboard() {
                             >
                                 📍 Search
                             </button>
-                            <button 
+                            <button
                                 onClick={() => setTrackingView(true)}
-                                style={{ 
-                                    flex: 1, padding: '14px', border: 'none', background: trackingView ? '#FFFBF5' : '#fff', 
+                                style={{
+                                    flex: 1, padding: '14px', border: 'none', background: trackingView ? '#FFFBF5' : '#fff',
                                     fontWeight: 800, fontSize: '0.78rem', color: trackingView ? '#E8571A' : '#94A3B8', cursor: 'pointer',
                                     borderBottom: trackingView ? '2px solid #E8571A' : '2px solid transparent',
                                     fontFamily: "'DM Sans', sans-serif", textTransform: 'uppercase', letterSpacing: '0.05em',
@@ -1096,9 +1125,9 @@ export default function OperatorDashboard() {
                             >
                                 🚑 Live Track
                                 {tracking.activeAmbulances.length > 0 && (
-                                    <span style={{ 
-                                        background: '#E8571A', color: '#fff', borderRadius: '10px', padding: '2px 8px', 
-                                        fontSize: '0.65rem', fontWeight: 800, minWidth: '18px', textAlign: 'center' 
+                                    <span style={{
+                                        background: '#E8571A', color: '#fff', borderRadius: '10px', padding: '2px 8px',
+                                        fontSize: '0.65rem', fontWeight: 800, minWidth: '18px', textAlign: 'center'
                                     }}>
                                         {tracking.activeAmbulances.length}
                                     </span>
@@ -1107,7 +1136,7 @@ export default function OperatorDashboard() {
                         </div>
 
                         <div style={{ flex: 1, overflowY: 'auto' }}>
-                            
+
                             {/* ─── TRACKING VIEW ─── */}
                             {trackingView && (
                                 <div style={{ padding: '1.5rem', display: 'flex', flexDirection: 'column', gap: '12px' }}>
@@ -1115,7 +1144,7 @@ export default function OperatorDashboard() {
                                         <h3 style={{ fontSize: '0.9rem', color: '#64748B', textTransform: 'uppercase', letterSpacing: '0.05em', fontWeight: 700, margin: 0 }}>
                                             Active Ambulances
                                         </h3>
-                                        <button 
+                                        <button
                                             onClick={tracking.refreshList}
                                             style={{ background: '#F1F5F9', border: 'none', borderRadius: '6px', padding: '4px 10px', fontSize: '0.7rem', fontWeight: 700, cursor: 'pointer', color: '#64748B' }}
                                         >
@@ -1133,16 +1162,16 @@ export default function OperatorDashboard() {
                                         </div>
                                     ) : (
                                         tracking.activeAmbulances.map((amb, index) => (
-                                            <div 
-                                                key={amb.ambulanceId} 
+                                            <div
+                                                key={amb.ambulanceId}
                                                 className="fade-up action-btn"
                                                 onClick={() => handleTrackAmbulance(amb.ambulanceId)}
-                                                style={{ 
+                                                style={{
                                                     animationDelay: `${index * 0.06}s`,
-                                                    padding: '16px', 
-                                                    background: tracking.trackedAmbulanceId === amb.ambulanceId ? 'rgba(232,87,26,0.04)' : '#FFFFFF', 
-                                                    border: tracking.trackedAmbulanceId === amb.ambulanceId ? '1.5px solid rgba(232,87,26,0.3)' : '1.5px solid #E2E8F0', 
-                                                    borderRadius: '14px', 
+                                                    padding: '16px',
+                                                    background: tracking.trackedAmbulanceId === amb.ambulanceId ? 'rgba(232,87,26,0.04)' : '#FFFFFF',
+                                                    border: tracking.trackedAmbulanceId === amb.ambulanceId ? '1.5px solid rgba(232,87,26,0.3)' : '1.5px solid #E2E8F0',
+                                                    borderRadius: '14px',
                                                     cursor: 'pointer',
                                                     transition: 'all 0.25s ease',
                                                     boxShadow: tracking.trackedAmbulanceId === amb.ambulanceId ? '0 4px 16px rgba(232,87,26,0.1)' : '0 2px 8px rgba(0,0,0,0.02)',
@@ -1151,16 +1180,16 @@ export default function OperatorDashboard() {
                                                 {/* Top row: Icon, Name, Status */}
                                                 <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '10px' }}>
                                                     <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
-                                                        <div style={{ 
-                                                            width: '36px', height: '36px', borderRadius: '10px', 
+                                                        <div style={{
+                                                            width: '36px', height: '36px', borderRadius: '10px',
                                                             background: 'rgba(232,87,26,0.08)', display: 'flex', alignItems: 'center', justifyContent: 'center',
                                                             fontSize: '1.2rem'
                                                         }}>🚑</div>
                                                         <div>
                                                             <div style={{ fontWeight: 800, color: '#1E293B', fontSize: '0.95rem' }}>{amb.ambulanceId}</div>
                                                             <div style={{ fontSize: '0.7rem', color: '#94A3B8', fontFamily: "'JetBrains Mono', monospace" }}>
-                                                                {amb.currentLeg === 'depot-to-patient' ? 'To Patient' : 
-                                                                 amb.currentLeg === 'patient-to-hospital' ? 'To Hospital' : 'Idle'}
+                                                                {amb.currentLeg === 'depot-to-patient' ? 'To Patient' :
+                                                                    amb.currentLeg === 'patient-to-hospital' ? 'To Hospital' : 'Idle'}
                                                             </div>
                                                         </div>
                                                     </div>
@@ -1201,7 +1230,7 @@ export default function OperatorDashboard() {
 
                                                 {/* Track button */}
                                                 <div style={{ marginTop: '12px', display: 'flex', justifyContent: 'flex-end' }}>
-                                                    <div style={{ 
+                                                    <div style={{
                                                         padding: '6px 14px', borderRadius: '8px', fontSize: '0.72rem', fontWeight: 800,
                                                         background: tracking.trackedAmbulanceId === amb.ambulanceId ? '#E8571A' : '#F1F5F9',
                                                         color: tracking.trackedAmbulanceId === amb.ambulanceId ? '#fff' : '#64748B',
@@ -1244,9 +1273,10 @@ export default function OperatorDashboard() {
                                                                     <span style={{ fontWeight: 800, color: '#1E293B' }}>
                                                                         {isDemoMode ? amb.ambulanceId : amb.name}
                                                                     </span>
-                                                                    <span style={{ fontSize: '0.65rem', padding: '3px 8px', borderRadius: '8px', fontWeight: 800, 
-                                                                        background: amb.status === 'Available' || amb.status === 'available' ? 'rgba(16,185,129,0.1)' : amb.status === 'Assigned' ? 'rgba(59,130,246,0.1)' : 'rgba(232,87,26,0.1)', 
-                                                                        color: amb.status === 'Available' || amb.status === 'available' ? '#10B981' : amb.status === 'Assigned' ? '#3B82F6' : '#E8571A' 
+                                                                    <span style={{
+                                                                        fontSize: '0.65rem', padding: '3px 8px', borderRadius: '8px', fontWeight: 800,
+                                                                        background: amb.status === 'Available' || amb.status === 'available' ? 'rgba(16,185,129,0.1)' : amb.status === 'Assigned' ? 'rgba(59,130,246,0.1)' : 'rgba(232,87,26,0.1)',
+                                                                        color: amb.status === 'Available' || amb.status === 'available' ? '#10B981' : amb.status === 'Assigned' ? '#3B82F6' : '#E8571A'
                                                                     }}>
                                                                         {isDemoMode ? amb.status : amb.status}
                                                                     </span>
@@ -1261,7 +1291,7 @@ export default function OperatorDashboard() {
                                                                 </div>
                                                                 {isDemoMode && <div style={{ fontSize: '0.7rem', color: '#64748B', marginTop: '4px' }}>{amb.driverName}</div>}
                                                             </div>
-                                                            
+
                                                             {!isDemoMode && amb.status === 'Available' && !assigned ? (
                                                                 <button className="action-btn" onClick={() => { setSelectedAmbulance(amb); setAssignmentLocation(""); }} style={{ padding: '0.7rem 1.2rem', background: '#E8571A', color: '#fff', border: 'none', borderRadius: '10px', fontSize: '0.8rem', fontWeight: 800, cursor: 'pointer' }}>
                                                                     Assign
@@ -1305,36 +1335,86 @@ export default function OperatorDashboard() {
                 {/* Assignment Modal */}
                 {selectedAmbulance && (
                     <div className="fade-up" style={{ position: 'fixed', inset: 0, zIndex: 100, display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'rgba(15, 23, 42, 0.4)', backdropFilter: 'blur(4px)' }}>
-                        <div style={{ background: '#FFFFFF', padding: '2rem', borderRadius: '16px', width: '400px', boxShadow: '0 20px 40px rgba(0,0,0,0.1)', border: '1px solid #E2E8F0' }}>
+                        <div style={{ background: '#FFFFFF', padding: '2rem', borderRadius: '16px', width: '460px', maxHeight: '85vh', overflowY: 'auto', boxShadow: '0 20px 40px rgba(0,0,0,0.1)', border: '1px solid #E2E8F0' }}>
                             <h2 style={{ margin: '0 0 10px 0', color: '#1E293B', fontSize: '1.4rem', fontWeight: 800 }}>Dispatch {selectedAmbulance.name}</h2>
                             <p style={{ margin: '0 0 20px 0', color: '#64748B', fontSize: '0.9rem' }}>Ambulance ID: <span style={{ fontFamily: "'JetBrains Mono', monospace" }}>{selectedAmbulance.id}</span></p>
-                            
+
+                            {/* Priority Selector */}
+                            <label style={{ display: 'block', marginBottom: '0.6rem', fontSize: '0.8rem', fontWeight: 700, color: '#334155', textTransform: 'uppercase', letterSpacing: '0.05em' }}>Emergency Priority</label>
+                            <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', marginBottom: '1.5rem' }}>
+                                {EMERGENCY_PRIORITIES.map((p) => {
+                                    const isSelected = emergencyPriority === p.value;
+                                    return (
+                                        <div
+                                            key={p.value}
+                                            onClick={() => setEmergencyPriority(p.value)}
+                                            style={{
+                                                padding: '10px 14px',
+                                                borderRadius: '10px',
+                                                border: isSelected ? `2px solid ${p.color}` : '1.5px solid #E2E8F0',
+                                                background: isSelected ? p.bgColor : '#FFFFFF',
+                                                cursor: 'pointer',
+                                                transition: 'all 0.2s ease',
+                                                display: 'flex',
+                                                alignItems: 'center',
+                                                gap: '12px',
+                                                boxShadow: isSelected ? `0 2px 12px ${p.bgColor}` : 'none',
+                                            }}
+                                        >
+                                            <div style={{
+                                                width: '32px', height: '32px', borderRadius: '8px',
+                                                background: isSelected ? p.color : '#F1F5F9',
+                                                display: 'flex', alignItems: 'center', justifyContent: 'center',
+                                                fontSize: '0.8rem', transition: 'all 0.2s',
+                                                color: isSelected ? '#fff' : '#94A3B8',
+                                                fontWeight: 800,
+                                            }}>
+                                                {p.tier}
+                                            </div>
+                                            <div style={{ flex: 1 }}>
+                                                <div style={{ fontSize: '0.82rem', fontWeight: 800, color: isSelected ? p.color : '#1E293B' }}>
+                                                    {p.emoji} {p.label}
+                                                </div>
+                                                <div style={{ fontSize: '0.68rem', color: '#94A3B8', marginTop: '1px' }}>
+                                                    {p.description}
+                                                </div>
+                                            </div>
+                                            {isSelected && (
+                                                <div style={{ color: p.color, fontWeight: 700, fontSize: '1rem' }}>✓</div>
+                                            )}
+                                        </div>
+                                    );
+                                })}
+                            </div>
+
                             <label style={{ display: 'block', marginBottom: '0.5rem', fontSize: '0.8rem', fontWeight: 700, color: '#334155', textTransform: 'uppercase', letterSpacing: '0.05em' }}>Enter Patient Location</label>
-                            <input 
-                                type="text" 
-                                placeholder="E.g. 123 Main St, Near Central Park..." 
+                            <input
+                                type="text"
+                                placeholder="E.g. 123 Main St, Near Central Park..."
                                 value={assignmentLocation}
                                 onChange={(e) => setAssignmentLocation(e.target.value)}
-                                style={{ width: '100%', padding: '0.8rem', borderRadius: '8px', border: '1.5px solid #E2E8F0', marginBottom: '1.5rem', outline: 'none', fontFamily: "'DM Sans', sans-serif" }} 
+                                style={{ width: '100%', padding: '0.8rem', borderRadius: '8px', border: '1.5px solid #E2E8F0', marginBottom: '1.5rem', outline: 'none', fontFamily: "'DM Sans', sans-serif" }}
                             />
-                            
+
                             <div style={{ display: 'flex', gap: '1rem' }}>
-                                <button 
+                                <button
                                     onClick={() => {
                                         if (assignmentLocation.trim() !== "") {
+                                            const priorityInfo = getPriorityByValue(emergencyPriority);
+                                            const priorityLabel = priorityInfo ? `${priorityInfo.emoji} ${priorityInfo.tier} — ${priorityInfo.label}` : '';
                                             assignAmbulance(selectedAmbulance.id, assignmentLocation);
                                             setSelectedAmbulance(null);
                                         } else {
                                             alert("Please enter a location to dispatch the ambulance.");
                                         }
-                                    }} 
+                                    }}
                                     className="action-btn"
                                     style={{ flex: 1, padding: '0.8rem', background: '#E8571A', color: '#fff', border: 'none', borderRadius: '8px', fontWeight: 700, cursor: 'pointer', fontFamily: "'DM Sans', sans-serif" }}
                                 >
                                     Confirm Dispatch
                                 </button>
-                                <button 
-                                    onClick={() => setSelectedAmbulance(null)} 
+                                <button
+                                    onClick={() => setSelectedAmbulance(null)}
                                     style={{ padding: '0.8rem 1.2rem', background: '#F1F5F9', color: '#64748B', border: 'none', borderRadius: '8px', fontWeight: 700, cursor: 'pointer', fontFamily: "'DM Sans', sans-serif" }}
                                 >
                                     Cancel
@@ -1344,17 +1424,18 @@ export default function OperatorDashboard() {
                     </div>
                 )}
 
-                {/* 102 Call Modal */}
-                {show102Call && (
+
+                {/* Search Ambulance Modal */}
+                {showSearchModal && (
                     <div className="fade-up" style={{ position: 'fixed', inset: 0, zIndex: 100, display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'rgba(15, 23, 42, 0.4)', backdropFilter: 'blur(4px)' }}>
                         <div style={{ background: '#FFFFFF', padding: '2rem', borderRadius: '16px', width: '480px', maxHeight: '85vh', overflowY: 'auto', boxShadow: '0 20px 50px rgba(0,0,0,0.15)', border: '1.5px solid #E2E8F0' }}>
-                            
+
                             {/* Header */}
                             <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '1.5rem' }}>
                                 <h2 style={{ margin: 0, color: '#E8571A', fontSize: '1.6rem', fontWeight: 800, display: 'flex', alignItems: 'center', gap: '8px' }}>
-                                    📞 102 Emergency Call
+                                    🔍 Search Ambulance
                                 </h2>
-                                <button 
+                                <button
                                     onClick={resetCallState}
                                     style={{ background: '#F1F5F9', border: 'none', borderRadius: '8px', width: '32px', height: '32px', cursor: 'pointer', fontSize: '1.2rem', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#64748B' }}
                                 >
@@ -1373,44 +1454,96 @@ export default function OperatorDashboard() {
                             {callState === "receiving" && (
                                 <>
                                     <p style={{ margin: '0 0 1.2rem 0', color: '#64748B', fontSize: '0.95rem' }}>Enter caller information below:</p>
-                                    
+
                                     <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem', marginBottom: '1.5rem' }}>
                                         <div>
                                             <label style={{ display: 'block', marginBottom: '0.4rem', fontSize: '0.78rem', fontWeight: 700, color: '#334155', textTransform: 'uppercase' }}>Caller Name</label>
-                                            <input 
-                                                type="text" 
+                                            <input
+                                                type="text"
                                                 placeholder="e.g. John Doe"
                                                 value={callerName}
                                                 onChange={(e) => setCallerName(e.target.value)}
-                                                style={{ width: '100%', padding: '0.75rem', borderRadius: '8px', border: '1.5px solid #E2E8F0', outline: 'none' }} 
+                                                style={{ width: '100%', padding: '0.75rem', borderRadius: '8px', border: '1.5px solid #E2E8F0', outline: 'none' }}
                                             />
                                         </div>
                                         <div>
                                             <label style={{ display: 'block', marginBottom: '0.4rem', fontSize: '0.78rem', fontWeight: 700, color: '#334155', textTransform: 'uppercase' }}>Caller Phone</label>
-                                            <input 
-                                                type="tel" 
+                                            <input
+                                                type="tel"
                                                 placeholder="+91 9876543210"
                                                 value={callerPhone}
                                                 onChange={(e) => setCallerPhone(e.target.value)}
-                                                style={{ width: '100%', padding: '0.75rem', borderRadius: '8px', border: '1.5px solid #E2E8F0', outline: 'none' }} 
+                                                style={{ width: '100%', padding: '0.75rem', borderRadius: '8px', border: '1.5px solid #E2E8F0', outline: 'none' }}
                                             />
                                         </div>
                                         <div>
                                             <label style={{ display: 'block', marginBottom: '0.4rem', fontSize: '0.78rem', fontWeight: 700, color: '#334155', textTransform: 'uppercase' }}>Emergency Details</label>
-                                            <textarea 
+                                            <textarea
                                                 placeholder="e.g. Patient has chest pain, difficulty breathing, conscious..."
                                                 value={callDetails}
                                                 onChange={(e) => setCallDetails(e.target.value)}
-                                                style={{ width: '100%', padding: '0.75rem', borderRadius: '8px', border: '1.5px solid #E2E8F0', outline: 'none', fontFamily: "'DM Sans', sans-serif", minHeight: '80px', resize: 'none' }} 
+                                                style={{ width: '100%', padding: '0.75rem', borderRadius: '8px', border: '1.5px solid #E2E8F0', outline: 'none', fontFamily: "'DM Sans', sans-serif", minHeight: '80px', resize: 'none' }}
                                             />
+                                        </div>
+
+                                        {/* Priority Selector */}
+                                        <div>
+                                            <label style={{ display: 'block', marginBottom: '0.6rem', fontSize: '0.78rem', fontWeight: 700, color: '#334155', textTransform: 'uppercase', letterSpacing: '0.04em' }}>Emergency Priority</label>
+                                            <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                                                {EMERGENCY_PRIORITIES.map((p) => {
+                                                    const isSelected = emergencyPriority === p.value;
+                                                    return (
+                                                        <div
+                                                            key={p.value}
+                                                            onClick={() => setEmergencyPriority(p.value)}
+                                                            style={{
+                                                                padding: '12px 14px',
+                                                                borderRadius: '10px',
+                                                                border: isSelected ? `2px solid ${p.color}` : '1.5px solid #E2E8F0',
+                                                                background: isSelected ? p.bgColor : '#FFFFFF',
+                                                                cursor: 'pointer',
+                                                                transition: 'all 0.2s ease',
+                                                                display: 'flex',
+                                                                alignItems: 'center',
+                                                                gap: '12px',
+                                                                boxShadow: isSelected ? `0 2px 12px ${p.bgColor}` : 'none',
+                                                            }}
+                                                        >
+                                                            <div style={{
+                                                                width: '36px', height: '36px', borderRadius: '10px',
+                                                                background: isSelected ? p.color : '#F1F5F9',
+                                                                display: 'flex', alignItems: 'center', justifyContent: 'center',
+                                                                fontSize: '1rem', transition: 'all 0.2s',
+                                                                color: isSelected ? '#fff' : '#94A3B8',
+                                                                fontWeight: 800,
+                                                            }}>
+                                                                {p.tier}
+                                                            </div>
+                                                            <div style={{ flex: 1 }}>
+                                                                <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                                                                    <span style={{ fontSize: '0.85rem', fontWeight: 800, color: isSelected ? p.color : '#1E293B' }}>
+                                                                        {p.emoji} {p.label}
+                                                                    </span>
+                                                                </div>
+                                                                <div style={{ fontSize: '0.72rem', color: '#94A3B8', marginTop: '2px', lineHeight: 1.3 }}>
+                                                                    {p.description}
+                                                                </div>
+                                                            </div>
+                                                            {isSelected && (
+                                                                <div style={{ color: p.color, fontWeight: 700, fontSize: '1rem' }}>✓</div>
+                                                            )}
+                                                        </div>
+                                                    );
+                                                })}
+                                            </div>
                                         </div>
                                     </div>
 
-                                    <button 
+                                    <button
                                         onClick={handle102CallReceived}
                                         disabled={!callerName || !callerPhone}
-                                        style={{ 
-                                            width: '100%', padding: '0.9rem', background: callerName && callerPhone ? '#E8571A' : '#CBD5E1', 
+                                        style={{
+                                            width: '100%', padding: '0.9rem', background: callerName && callerPhone ? '#E8571A' : '#CBD5E1',
                                             color: '#fff', border: 'none', borderRadius: '8px', fontWeight: 700, cursor: callerName && callerPhone ? 'pointer' : 'not-allowed',
                                             fontFamily: "'DM Sans', sans-serif"
                                         }}
@@ -1424,9 +1557,19 @@ export default function OperatorDashboard() {
                             {callState === "location" && (
                                 <>
                                     <div style={{ background: '#FFF7ED', border: '1.5px solid #FED7AA', padding: '1rem', borderRadius: '10px', marginBottom: '1.5rem' }}>
-                                        <p style={{ margin: 0, color: '#E8571A', fontWeight: 700, fontSize: '0.95rem' }}>
-                                            📍 Caller: <strong>{callerName}</strong> ({callerPhone})
-                                        </p>
+                                        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                                            <p style={{ margin: 0, color: '#E8571A', fontWeight: 700, fontSize: '0.95rem' }}>
+                                                📍 Caller: <strong>{callerName}</strong> ({callerPhone})
+                                            </p>
+                                            {(() => {
+                                                const p = getPriorityByValue(emergencyPriority);
+                                                return p ? (
+                                                    <span style={{ fontSize: '0.7rem', fontWeight: 800, padding: '4px 10px', borderRadius: '8px', background: p.bgColor, color: p.color, border: `1px solid ${p.color}20`, whiteSpace: 'nowrap' }}>
+                                                        {p.emoji} {p.tier}
+                                                    </span>
+                                                ) : null;
+                                            })()}
+                                        </div>
                                     </div>
 
                                     <p style={{ margin: '0 0 1.2rem 0', color: '#64748B', fontSize: '0.95rem' }}>
@@ -1442,12 +1585,12 @@ export default function OperatorDashboard() {
                                         </div>
                                     )}
 
-                                    <button 
+                                    <button
                                         onClick={handleCapturePatientLocation}
-                                        style={{ 
-                                            width: '100%', padding: '1rem', marginBottom: '1rem', 
-                                            background: patientLocation ? '#D1FAE5' : '#E8571A', 
-                                            color: patientLocation ? '#059669' : '#fff', 
+                                        style={{
+                                            width: '100%', padding: '1rem', marginBottom: '1rem',
+                                            background: patientLocation ? '#D1FAE5' : '#E8571A',
+                                            color: patientLocation ? '#059669' : '#fff',
                                             border: 'none', borderRadius: '8px', fontWeight: 700, cursor: 'pointer',
                                             fontFamily: "'DM Sans', sans-serif", fontSize: '0.95rem'
                                         }}
@@ -1456,17 +1599,17 @@ export default function OperatorDashboard() {
                                     </button>
 
                                     <div style={{ display: 'flex', gap: '0.8rem' }}>
-                                        <button 
+                                        <button
                                             onClick={() => setCallState("receiving")}
                                             style={{ flex: 1, padding: '0.75rem', background: '#F1F5F9', color: '#64748B', border: 'none', borderRadius: '8px', fontWeight: 700, cursor: 'pointer', fontFamily: "'DM Sans', sans-serif" }}
                                         >
                                             Back
                                         </button>
-                                        <button 
+                                        <button
                                             onClick={() => patientLocation && setCallState("assigning")}
                                             disabled={!patientLocation}
-                                            style={{ 
-                                                flex: 1, padding: '0.75rem', background: patientLocation ? '#E8571A' : '#CBD5E1', 
+                                            style={{
+                                                flex: 1, padding: '0.75rem', background: patientLocation ? '#E8571A' : '#CBD5E1',
                                                 color: '#fff', border: 'none', borderRadius: '8px', fontWeight: 700, cursor: patientLocation ? 'pointer' : 'not-allowed',
                                                 fontFamily: "'DM Sans', sans-serif"
                                             }}
@@ -1481,12 +1624,24 @@ export default function OperatorDashboard() {
                             {callState === "assigning" && (
                                 <>
                                     <div style={{ background: '#FFF7ED', border: '1.5px solid #FED7AA', padding: '1rem', borderRadius: '10px', marginBottom: '1.5rem' }}>
-                                        <p style={{ margin: '0 0 4px 0', color: '#E8571A', fontWeight: 700, fontSize: '0.9rem' }}>
-                                            📍 {callerName}
-                                        </p>
-                                        <p style={{ margin: 0, color: '#E8571A', fontSize: '0.8rem', fontFamily: "'JetBrains Mono', monospace" }}>
-                                            {patientLocation?.lat.toFixed(4)}, {patientLocation?.lng.toFixed(4)}
-                                        </p>
+                                        <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between' }}>
+                                            <div>
+                                                <p style={{ margin: '0 0 4px 0', color: '#E8571A', fontWeight: 700, fontSize: '0.9rem' }}>
+                                                    📍 {callerName}
+                                                </p>
+                                                <p style={{ margin: 0, color: '#E8571A', fontSize: '0.8rem', fontFamily: "'JetBrains Mono', monospace" }}>
+                                                    {patientLocation?.lat.toFixed(4)}, {patientLocation?.lng.toFixed(4)}
+                                                </p>
+                                            </div>
+                                            {(() => {
+                                                const p = getPriorityByValue(emergencyPriority);
+                                                return p ? (
+                                                    <span style={{ fontSize: '0.7rem', fontWeight: 800, padding: '4px 10px', borderRadius: '8px', background: p.bgColor, color: p.color, border: `1px solid ${p.color}20`, whiteSpace: 'nowrap' }}>
+                                                        {p.emoji} {p.tier} — {p.label}
+                                                    </span>
+                                                ) : null;
+                                            })()}
+                                        </div>
                                     </div>
 
                                     <label style={{ display: 'block', marginBottom: '0.8rem', fontSize: '0.85rem', fontWeight: 700, color: '#334155', textTransform: 'uppercase' }}>
@@ -1496,7 +1651,7 @@ export default function OperatorDashboard() {
                                     <div style={{ display: 'flex', flexDirection: 'column', gap: '0.8rem', maxHeight: '300px', overflowY: 'auto', marginBottom: '1.5rem' }}>
                                         {availableAmbulances.length > 0 ? (
                                             availableAmbulances.map((amb) => (
-                                                <div 
+                                                <div
                                                     key={amb._id || amb.id}
                                                     onClick={() => setSelectedAmbulanceForCall(amb)}
                                                     style={{
@@ -1531,19 +1686,19 @@ export default function OperatorDashboard() {
                                     </div>
 
                                     <div style={{ display: 'flex', gap: '0.8rem' }}>
-                                        <button 
+                                        <button
                                             onClick={() => setCallState("location")}
                                             style={{ flex: 1, padding: '0.75rem', background: '#F1F5F9', color: '#64748B', border: 'none', borderRadius: '8px', fontWeight: 700, cursor: 'pointer', fontFamily: "'DM Sans', sans-serif" }}
                                         >
                                             Back
                                         </button>
-                                        <button 
+                                        <button
                                             onClick={handleAssignAmbulanceToPatient}
                                             disabled={!selectedAmbulanceForCall || isAssigning}
-                                            style={{ 
-                                                flex: 1, padding: '0.75rem', 
-                                                background: selectedAmbulanceForCall && !isAssigning ? '#10B981' : '#CBD5E1', 
-                                                color: '#fff', border: 'none', borderRadius: '8px', fontWeight: 700, 
+                                            style={{
+                                                flex: 1, padding: '0.75rem',
+                                                background: selectedAmbulanceForCall && !isAssigning ? '#10B981' : '#CBD5E1',
+                                                color: '#fff', border: 'none', borderRadius: '8px', fontWeight: 700,
                                                 cursor: selectedAmbulanceForCall && !isAssigning ? 'pointer' : 'not-allowed',
                                                 fontFamily: "'DM Sans', sans-serif"
                                             }}
@@ -1559,9 +1714,9 @@ export default function OperatorDashboard() {
 
                 {/* Toast Notification */}
                 {toast && (
-                    <div style={{ 
+                    <div style={{
                         position: 'fixed', bottom: '1.5rem', right: '1.5rem', zIndex: 9999,
-                        background: '#fff', border: `1px solid ${toast.type === 'success' ? '#D1FAE5' : '#FECACA'}`, 
+                        background: '#fff', border: `1px solid ${toast.type === 'success' ? '#D1FAE5' : '#FECACA'}`,
                         borderLeft: `4px solid ${toast.type === 'success' ? '#10B981' : '#EF4444'}`,
                         padding: '1rem 1.4rem', borderRadius: '12px', fontSize: '0.9rem', fontWeight: 600,
                         boxShadow: '0 8px 32px rgba(0,0,0,0.12)', animation: 'fadeUp 0.35s cubic-bezier(0.34,1.56,0.64,1) both'

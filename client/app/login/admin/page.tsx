@@ -3,10 +3,13 @@
 import { useState, useEffect, useRef } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
+import { saveAuth } from "../../../utils/auth";
 
 const API_BASE = process.env.NEXT_PUBLIC_API_URL || "http://localhost:5000/api";
 
 export default function AdminLogin() {
+  // ── Auto-redirect if already logged in as admin ──
+  const [ready, setReady] = useState(false);
   const router = useRouter();
   const [email, setEmail]       = useState("");
   const [password, setPassword] = useState("");
@@ -20,6 +23,16 @@ export default function AdminLogin() {
     "> AES-256 key exchange complete ✓",
     "> Admin session awaiting credentials",
   ]);
+
+  useEffect(() => {
+    const token = localStorage.getItem("gh_token");
+    const role  = localStorage.getItem("gh_role");
+    if (token && (role === "admin" || role === "traffic_control")) {
+      router.replace("/admin");
+      return;
+    }
+    setReady(true);
+  }, [router]);
 
   /* type-on terminal effect */
   useEffect(() => {
@@ -47,11 +60,13 @@ export default function AdminLogin() {
       if (!res.ok) throw new Error(data.message || "Access denied");
       if (!["admin", "traffic_control"].includes(data.user?.role)) throw new Error("Insufficient privileges. Admin or Traffic Control role required.");
       setTermLines(prev => [...prev, "> Access granted ✓", "> Routing to admin console…"]);
-      localStorage.setItem("gh_token", data.token); localStorage.setItem("gh_role", data.user.role);
+      saveAuth(data.token, data.user.role);
       setTimeout(() => router.push("/admin"), 900);
     } catch (err: any) { setError(err.message); setTermLines(prev => [...prev, `> ✗ Error: ${err.message}`]); }
     finally { setLoading(false); }
   };
+
+  if (!ready) return <div style={{ minHeight: '100vh', background: '#FFFBF5', display: 'flex', alignItems: 'center', justifyContent: 'center' }}><div style={{ width: 32, height: 32, borderRadius: '50%', border: '3px solid rgba(16,185,129,0.2)', borderTopColor: '#10B981', animation: 'spin 0.8s linear infinite' }} /></div>;
 
   return (
     <>
