@@ -32,6 +32,7 @@ export default function OperatorDashboard() {
     const mapRef = useRef<HTMLDivElement>(null);
     const mapObj = useRef<google.maps.Map | null>(null);
     const markersRef = useRef<google.maps.Marker[]>([]);
+    const directionsRendererRef = useRef<google.maps.DirectionsRenderer | null>(null);
 
     // ─── Live Tracking State ───
     const tracking = useOperatorTracking();
@@ -40,6 +41,25 @@ export default function OperatorDashboard() {
     const trackingRouteRef = useRef<google.maps.Polyline | null>(null);
     const trackingDestMarkerRef = useRef<google.maps.Marker | null>(null);
     const trackingPulseRef = useRef<google.maps.Circle | null>(null);
+
+    // ─── 102 Call Center State ───
+    const [show102Call, setShow102Call] = useState(false);
+    const [activeCall, setActiveCall] = useState<any>(null);
+    const [callState, setCallState] = useState<"receiving" | "location" | "assigning">("receiving");
+    const [callerName, setCallerName] = useState("");
+    const [callerPhone, setCallerPhone] = useState("");
+    const [callDetails, setCallDetails] = useState("");
+    const [patientLocation, setPatientLocation] = useState<{ lat: number; lng: number } | null>(null);
+    const [availableAmbulances, setAvailableAmbulances] = useState<any[]>([]);
+    const [selectedAmbulanceForCall, setSelectedAmbulanceForCall] = useState<any | null>(null);
+    const [isAssigning, setIsAssigning] = useState(false);
+    const [toast, setToast] = useState<{ msg: string; type: "success" | "error" } | null>(null);
+
+    // ─── Demo Mode State ───
+    const [isDemoMode, setIsDemoMode] = useState(false);
+    const [demoAmbulances, setDemoAmbulances] = useState<any[]>([]);
+    const demoMarkersRef = useRef<google.maps.Marker[]>([]);
+    const demoAnimationRef = useRef<NodeJS.Timeout | null>(null);
 
     useEffect(() => {
         const token = localStorage.getItem("gh_token");
@@ -84,6 +104,16 @@ export default function OperatorDashboard() {
                 ],
                 disableDefaultUI: true,
                 zoomControl: true,
+            });
+            
+            directionsRendererRef.current = new window.google.maps.DirectionsRenderer({
+                map: mapObj.current,
+                suppressMarkers: true,
+                polylineOptions: {
+                    strokeColor: "#E8571A",
+                    strokeWeight: 5,
+                    strokeOpacity: 0.8
+                }
             });
         }
     }, [mapReady, isLoggedIn]);
@@ -201,6 +231,29 @@ export default function OperatorDashboard() {
         }
     }, [trackingView, clearTrackingOverlays]);
 
+    // Draw route from selected ambulance to patient
+    useEffect(() => {
+        if (selectedAmbulance && searchedCenter && window.google && directionsRendererRef.current) {
+            const directionsService = new window.google.maps.DirectionsService();
+            directionsService.route(
+                {
+                    origin: { lat: selectedAmbulance.lat, lng: selectedAmbulance.lng },
+                    destination: searchedCenter,
+                    travelMode: window.google.maps.TravelMode.DRIVING,
+                },
+                (result, status) => {
+                    if (status === window.google.maps.DirectionsStatus.OK) {
+                        directionsRendererRef.current?.setDirections(result);
+                    } else {
+                        console.error("Directions request failed due to " + status);
+                    }
+                }
+            );
+        } else if (!selectedAmbulance && directionsRendererRef.current) {
+            directionsRendererRef.current.setDirections({ routes: [] } as any);
+        }
+    }, [selectedAmbulance, searchedCenter]);
+
     const handleTrackAmbulance = (ambulanceId: string) => {
         tracking.trackAmbulance(ambulanceId);
         setTrackingView(true);
@@ -212,6 +265,7 @@ export default function OperatorDashboard() {
         setHospitals([]);
         setAmbulances([]);
         setAssigned(null);
+        setSelectedAmbulance(null);
     };
 
     const handleStopTracking = () => {
@@ -248,6 +302,163 @@ export default function OperatorDashboard() {
         }
     };
 
+    const handleDemoMode = () => {
+        setIsLoggedIn(true);
+        setIsDemoMode(true);
+        initializeDemoAmbulances();
+    };
+
+    const initializeDemoAmbulances = () => {
+        const dummyAmbulances = [
+            {
+                _id: "demo_amb_001",
+                ambulanceId: "AMB-001",
+                vehicleNumber: "MH-02-AB-1001",
+                driverName: "Rajesh Kumar",
+                contactNumber: "9876543210",
+                status: "available",
+                lat: 18.5195,
+                lng: 73.8567,
+                currentLocation: "Camp, Pune",
+                targetLat: 18.5350,
+                targetLng: 73.8750,
+                speed: 0.0008
+            },
+            {
+                _id: "demo_amb_002",
+                ambulanceId: "AMB-002",
+                vehicleNumber: "MH-02-AB-1002",
+                driverName: "Priya Sharma",
+                contactNumber: "9876543211",
+                status: "available",
+                lat: 18.5220,
+                lng: 73.8595,
+                currentLocation: "Model Colony, Pune",
+                targetLat: 18.5100,
+                targetLng: 73.8400,
+                speed: 0.0007
+            },
+            {
+                _id: "demo_amb_003",
+                ambulanceId: "AMB-003",
+                vehicleNumber: "MH-02-AB-1003",
+                driverName: "Amit Singh",
+                contactNumber: "9876543212",
+                status: "available",
+                lat: 18.5240,
+                lng: 73.8545,
+                currentLocation: "Kalas, Pune",
+                targetLat: 18.5500,
+                targetLng: 73.8600,
+                speed: 0.00075
+            },
+            {
+                _id: "demo_amb_004",
+                ambulanceId: "AMB-004",
+                vehicleNumber: "MH-02-AB-1004",
+                driverName: "Neha Patel",
+                contactNumber: "9876543213",
+                status: "available",
+                lat: 18.5180,
+                lng: 73.8580,
+                currentLocation: "Shaniwar Wada, Pune",
+                targetLat: 18.5250,
+                targetLng: 73.8800,
+                speed: 0.00085
+            },
+            {
+                _id: "demo_amb_005",
+                ambulanceId: "AMB-005",
+                vehicleNumber: "MH-02-AB-1005",
+                driverName: "Vikram Desai",
+                contactNumber: "9876543214",
+                status: "available",
+                lat: 18.5260,
+                lng: 73.8600,
+                currentLocation: "Viman Nagar, Pune",
+                targetLat: 18.5150,
+                targetLng: 73.8650,
+                speed: 0.00076
+            }
+        ];
+        setDemoAmbulances(dummyAmbulances);
+    };
+
+    useEffect(() => {
+        if (!isDemoMode || !mapObj.current) return;
+
+        // Clear previous markers
+        demoMarkersRef.current.forEach(m => m.setMap(null));
+        demoMarkersRef.current = [];
+
+        // Create markers for demo ambulances
+        const createEmojiIcon = (emoji: string, size = 40) => {
+            const canvas = document.createElement("canvas");
+            canvas.width = size;
+            canvas.height = size;
+            const ctx = canvas.getContext("2d")!;
+            ctx.font = `${size * 0.8}px Arial`;
+            ctx.textAlign = "center";
+            ctx.textBaseline = "middle";
+            ctx.fillText(emoji, size / 2, size / 2);
+            return canvas.toDataURL();
+        };
+
+        demoAmbulances.forEach(amb => {
+            const marker = new window.google.maps.Marker({
+                position: { lat: amb.lat, lng: amb.lng },
+                map: mapObj.current,
+                icon: {
+                    url: createEmojiIcon("🚑"),
+                    scaledSize: new window.google.maps.Size(40, 40),
+                    anchor: new window.google.maps.Point(20, 20),
+                },
+                title: `${amb.ambulanceId} - ${amb.driverName}`,
+                zIndex: 100,
+            });
+            demoMarkersRef.current.push(marker);
+        });
+
+        // Animate ambulances
+        if (demoAnimationRef.current) clearInterval(demoAnimationRef.current);
+
+        demoAnimationRef.current = setInterval(() => {
+            setDemoAmbulances(prev => prev.map((amb, idx) => {
+                const marker = demoMarkersRef.current[idx];
+                if (!marker) return amb;
+
+                let newLat = amb.lat;
+                let newLng = amb.lng;
+
+                // Calculate direction to target
+                const latDiff = amb.targetLat - amb.lat;
+                const lngDiff = amb.targetLng - amb.lng;
+                const distance = Math.sqrt(latDiff * latDiff + lngDiff * lngDiff);
+
+                if (distance > 0.001) {
+                    const latStep = (latDiff / distance) * amb.speed;
+                    const lngStep = (lngDiff / distance) * amb.speed;
+                    newLat = amb.lat + latStep;
+                    newLng = amb.lng + lngStep;
+                } else {
+                    // Reached target, pick new random target
+                    newLat = amb.lat;
+                    newLng = amb.lng;
+                    amb.targetLat = 18.5 + Math.random() * 0.1;
+                    amb.targetLng = 73.8 + Math.random() * 0.1;
+                }
+
+                marker.setPosition({ lat: newLat, lng: newLng });
+
+                return { ...amb, lat: newLat, lng: newLng };
+            }));
+        }, 100);
+
+        return () => {
+            if (demoAnimationRef.current) clearInterval(demoAnimationRef.current);
+        };
+    }, [isDemoMode, demoAmbulances.length, mapObj.current]);
+
     const handleSearch = (e: React.FormEvent) => {
         e.preventDefault();
         if (!searchQuery) return;
@@ -255,12 +466,16 @@ export default function OperatorDashboard() {
         // Exit tracking view if active
         if (trackingView) handleStopTracking();
 
+        const baseLat = 18.8933;
+        const baseLng = 73.1768;
+
         const newCenter = { 
-            lat: DEFAULT_CENTER.lat + (Math.random() * 0.04 - 0.02), 
-            lng: DEFAULT_CENTER.lng + (Math.random() * 0.04 - 0.02) 
+            lat: baseLat + (Math.random() * 0.02 - 0.01), 
+            lng: baseLng + (Math.random() * 0.02 - 0.01) 
         };
         setSearchedCenter(newCenter);
         setAssigned(null);
+        setSelectedAmbulance(null);
 
         if (mapObj.current) {
             mapObj.current.panTo(newCenter);
@@ -319,8 +534,8 @@ export default function OperatorDashboard() {
             const searchMarker = new window.google.maps.Marker({
                 position: center,
                 map: mapObj.current,
-                icon: createEmojiIcon("📍"),
-                title: "Searched Location"
+                icon: createEmojiIcon("👤"),
+                title: "Patient Location"
             });
             markersRef.current.push(searchMarker);
 
@@ -364,15 +579,205 @@ export default function OperatorDashboard() {
         }
     };
 
+    // ─── 102 Call Handlers ───
+    const showToast = (msg: string, type: "success" | "error") => {
+        setToast({ msg, type });
+        setTimeout(() => setToast(null), 3500);
+    };
+
+    const handle102CallReceived = () => {
+        setCallState("location");
+        setActiveCall({
+            id: `CALL-${Date.now()}`,
+            receivedAt: new Date(),
+            callerName,
+            callerPhone,
+            callDetails,
+        });
+    };
+
+    const handleCapturePatientLocation = async () => {
+        if (!navigator.geolocation) {
+            showToast("Geolocation not supported", "error");
+            return;
+        }
+
+        navigator.geolocation.getCurrentPosition(
+            (position) => {
+                const { latitude, longitude } = position.coords;
+                setPatientLocation({ lat: latitude, lng: longitude });
+                showToast("✓ Patient location captured", "success");
+                setCallState("assigning");
+                fetchAvailableAmbulances();
+            },
+            (error) => {
+                console.error("Geolocation error:", error);
+                showToast("Could not get location. Please check permissions.", "error");
+            }
+        );
+    };
+
+    const fetchAvailableAmbulances = async () => {
+        try {
+            const token = localStorage.getItem("gh_token");
+            const API_BASE = process.env.NEXT_PUBLIC_API_URL || "http://localhost:5000/api";
+            
+            const res = await fetch(`${API_BASE}/vehicles?status=available`, {
+                headers: { Authorization: `Bearer ${token}` }
+            });
+            const data = await res.json();
+            setAvailableAmbulances(data.vehicles || []);
+        } catch (error) {
+            console.error("Failed to fetch ambulances:", error);
+            // Use dummy ambulances for testing
+            const dummyAmbulances = [
+                {
+                    _id: "amb_001",
+                    ambulanceId: "AMB-001",
+                    vehicleNumber: "MH-02-AB-1001",
+                    driverName: "Rajesh Kumar",
+                    contactNumber: "9876543210",
+                    status: "available",
+                    lat: 18.5195,
+                    lng: 73.8567,
+                    currentLocation: "Camp, Pune"
+                },
+                {
+                    _id: "amb_002",
+                    ambulanceId: "AMB-002",
+                    vehicleNumber: "MH-02-AB-1002",
+                    driverName: "Priya Sharma",
+                    contactNumber: "9876543211",
+                    status: "available",
+                    lat: 18.5220,
+                    lng: 73.8595,
+                    currentLocation: "Model Colony, Pune"
+                },
+                {
+                    _id: "amb_003",
+                    ambulanceId: "AMB-003",
+                    vehicleNumber: "MH-02-AB-1003",
+                    driverName: "Amit Singh",
+                    contactNumber: "9876543212",
+                    status: "available",
+                    lat: 18.5240,
+                    lng: 73.8545,
+                    currentLocation: "Kalas, Pune"
+                },
+                {
+                    _id: "amb_004",
+                    ambulanceId: "AMB-004",
+                    vehicleNumber: "MH-02-AB-1004",
+                    driverName: "Neha Patel",
+                    contactNumber: "9876543213",
+                    status: "available",
+                    lat: 18.5180,
+                    lng: 73.8580,
+                    currentLocation: "Shaniwar Wada, Pune"
+                },
+                {
+                    _id: "amb_005",
+                    ambulanceId: "AMB-005",
+                    vehicleNumber: "MH-02-AB-1005",
+                    driverName: "Vikram Desai",
+                    contactNumber: "9876543214",
+                    status: "available",
+                    lat: 18.5260,
+                    lng: 73.8600,
+                    currentLocation: "Viman Nagar, Pune"
+                }
+            ];
+            setAvailableAmbulances(dummyAmbulances);
+            showToast("⚠️ Using test ambulances (API unavailable)", "error");
+        }
+    };
+
+    const handleAssignAmbulanceToPatient = async () => {
+        if (!selectedAmbulanceForCall || !patientLocation) {
+            showToast("Please select an ambulance", "error");
+            return;
+        }
+
+        setIsAssigning(true);
+        try {
+            const token = localStorage.getItem("gh_token");
+            const API_BASE = process.env.NEXT_PUBLIC_API_URL || "http://localhost:5000/api";
+            
+            // Create emergency via 102 call
+            const emergencyRes = await fetch(`${API_BASE}/emergency/102-call`, {
+                method: "POST",
+                headers: {
+                    "Content-Type": "application/json",
+                    Authorization: `Bearer ${token}`
+                },
+                body: JSON.stringify({
+                    callerPhone: callerPhone,
+                    callerName: callerName,
+                    callerLocation: patientLocation,
+                    details: callDetails,
+                    priority: "critical",
+                })
+            });
+
+            if (!emergencyRes.ok) {
+                const errData = await emergencyRes.json();
+                throw new Error(errData.message || "Failed to create emergency");
+            }
+            const emergencyData = await emergencyRes.json();
+            const session = emergencyData.session;
+
+            // Assign ambulance to emergency
+            const assignRes = await fetch(`${API_BASE}/emergency/${session._id}/assign-ambulance`, {
+                method: "POST",
+                headers: {
+                    "Content-Type": "application/json",
+                    Authorization: `Bearer ${token}`
+                },
+                body: JSON.stringify({
+                    vehicleId: selectedAmbulanceForCall._id || selectedAmbulanceForCall.id,
+                })
+            });
+
+            if (!assignRes.ok) {
+                const errData = await assignRes.json();
+                throw new Error(errData.message || "Failed to assign ambulance");
+            }
+
+            showToast(`✓ Ambulance AMB-${selectedAmbulanceForCall.ambulanceId} assigned to ${callerName}`, "success");
+            resetCallState();
+        } catch (error) {
+            console.error("Assignment error:", error);
+            showToast(`Error: ${error instanceof Error ? error.message : "Failed to assign ambulance"}`, "error");
+        } finally {
+            setIsAssigning(false);
+        }
+    };
+
+    const resetCallState = () => {
+        setShow102Call(false);
+        setCallState("receiving");
+        setCallerName("");
+        setCallerPhone("");
+        setCallDetails("");
+        setPatientLocation(null);
+        setSelectedAmbulanceForCall(null);
+        setActiveCall(null);
+    };
+
     const handleLogout = () => {
         localStorage.removeItem("gh_token");
         localStorage.removeItem("gh_role");
         setIsLoggedIn(false);
+        setIsDemoMode(false);
         setLoginName("");
         setPassword("");
         setLoginError("");
         setSearchQuery("");
         setSearchedCenter(null);
+        setDemoAmbulances([]);
+        demoMarkersRef.current.forEach(m => m.setMap(null));
+        demoMarkersRef.current = [];
+        if (demoAnimationRef.current) clearInterval(demoAnimationRef.current);
         setHospitals([]);
         setAmbulances([]);
         setAssigned(null);
@@ -427,6 +832,9 @@ export default function OperatorDashboard() {
                         </button>
                     </form>
                     <div style={{ textAlign: 'center', marginTop: '1.5rem', display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
+                        <button onClick={handleDemoMode} style={{ padding: '0.8rem', borderRadius: '8px', background: '#3B82F6', color: '#fff', fontSize: '0.9rem', fontWeight: 600, border: 'none', cursor: 'pointer', transition: 'all 0.2s', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '8px' }}>
+                            <span>🎬</span> View Demo
+                        </button>
                         <Link href="/" style={{ padding: '0.8rem', borderRadius: '8px', border: '1.5px solid #E2E8F0', color: '#64748B', fontSize: '0.9rem', fontWeight: 600, textDecoration: 'none', transition: 'all 0.2s', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '8px' }} className="action-btn">
                             <span>🏠</span> Back to Home
                         </Link>
@@ -540,6 +948,28 @@ export default function OperatorDashboard() {
                             </button>
                         </form>
                         <div style={{ width: '1px', height: '24px', background: '#E2E8F0' }} />
+                        <button 
+                            onClick={() => {
+                                setShow102Call(true);
+                                setCallState("receiving");
+                            }}
+                            style={{ background: 'rgba(232,87,26,0.1)', border: '1.5px solid #E8571A', color: '#E8571A', fontWeight: 700, padding: '6px 12px', borderRadius: '8px', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '6px', fontSize: '0.9rem', fontFamily: "'DM Sans', sans-serif" }}
+                        >
+                            <span>📞</span> 108 Call
+                        </button>
+                        <div style={{ width: '1px', height: '24px', background: '#E2E8F0' }} />
+                        {isDemoMode && (
+                            <>
+                                <button 
+                                    onClick={handleLogout}
+                                    style={{ background: 'rgba(59,182,246,0.1)', border: '1.5px solid #3B82F6', color: '#3B82F6', fontWeight: 700, padding: '6px 12px', borderRadius: '8px', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '6px', fontSize: '0.9rem', fontFamily: "'DM Sans', sans-serif" }}
+                                >
+                                    <span>🎬</span> Exit Demo
+                                </button>
+                                <div style={{ width: '1px', height: '24px', background: '#E2E8F0' }} />
+                            </>
+                        )}
+                        
                         <Link href="/" style={{ textDecoration: 'none', color: '#64748B', fontWeight: 700, display: 'flex', alignItems: 'center', gap: '6px', fontSize: '0.9rem', fontFamily: "'DM Sans', sans-serif" }}>
                             <span>🏠</span> Home
                         </Link>
@@ -799,33 +1229,44 @@ export default function OperatorDashboard() {
                                             {/* Ambulances Section */}
                                             <div>
                                                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1rem' }}>
-                                                    <h3 style={{ fontSize: '0.9rem', color: '#64748B', textTransform: 'uppercase', letterSpacing: '0.05em', fontWeight: 700, margin: 0 }}>Nearby Ambulances</h3>
-                                                    <div style={{ background: '#F1F5F9', color: '#1E293B', fontSize: '0.7rem', padding: '4px 10px', borderRadius: '12px', fontWeight: 800 }}>{ambulances.length} FOUND</div>
+                                                    <h3 style={{ fontSize: '0.9rem', color: '#64748B', textTransform: 'uppercase', letterSpacing: '0.05em', fontWeight: 700, margin: 0 }}>
+                                                        {isDemoMode ? '🎬 Demo Ambulances' : 'Nearby Ambulances'}
+                                                    </h3>
+                                                    <div style={{ background: '#F1F5F9', color: '#1E293B', fontSize: '0.7rem', padding: '4px 10px', borderRadius: '12px', fontWeight: 800 }}>
+                                                        {(isDemoMode ? demoAmbulances : ambulances).length} FOUND
+                                                    </div>
                                                 </div>
                                                 <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
-                                                    {ambulances.map((amb, index) => (
-                                                        <div key={amb.id} className="fade-up" style={{ animationDelay: `${index * 0.05}s`, padding: '1.2rem', background: '#FFFFFF', border: '1.5px solid #E2E8F0', borderRadius: '14px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', boxShadow: '0 2px 8px rgba(0,0,0,0.02)', transition: 'all 0.2s ease', cursor: 'default' }}>
+                                                    {(isDemoMode ? demoAmbulances : ambulances).map((amb, index) => (
+                                                        <div key={amb._id || amb.id} className="fade-up" style={{ animationDelay: `${index * 0.05}s`, padding: '1.2rem', background: '#FFFFFF', border: '1.5px solid #E2E8F0', borderRadius: '14px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', boxShadow: '0 2px 8px rgba(0,0,0,0.02)', transition: 'all 0.2s ease', cursor: 'default' }}>
                                                             <div>
                                                                 <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '6px' }}>
-                                                                    <span style={{ fontWeight: 800, color: '#1E293B' }}>{amb.name}</span>
+                                                                    <span style={{ fontWeight: 800, color: '#1E293B' }}>
+                                                                        {isDemoMode ? amb.ambulanceId : amb.name}
+                                                                    </span>
                                                                     <span style={{ fontSize: '0.65rem', padding: '3px 8px', borderRadius: '8px', fontWeight: 800, 
-                                                                        background: amb.status === 'Available' ? 'rgba(16,185,129,0.1)' : amb.status === 'Assigned' ? 'rgba(59,130,246,0.1)' : 'rgba(232,87,26,0.1)', 
-                                                                        color: amb.status === 'Available' ? '#10B981' : amb.status === 'Assigned' ? '#3B82F6' : '#E8571A' 
-                                                                    }}>{amb.status}</span>
+                                                                        background: amb.status === 'Available' || amb.status === 'available' ? 'rgba(16,185,129,0.1)' : amb.status === 'Assigned' ? 'rgba(59,130,246,0.1)' : 'rgba(232,87,26,0.1)', 
+                                                                        color: amb.status === 'Available' || amb.status === 'available' ? '#10B981' : amb.status === 'Assigned' ? '#3B82F6' : '#E8571A' 
+                                                                    }}>
+                                                                        {isDemoMode ? amb.status : amb.status}
+                                                                    </span>
                                                                 </div>
                                                                 <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                                                                    <div style={{ fontSize: '0.75rem', color: '#64748B', fontFamily: "'JetBrains Mono', monospace" }}>{amb.id}</div>
+                                                                    <div style={{ fontSize: '0.75rem', color: '#64748B', fontFamily: "'JetBrains Mono', monospace" }}>
+                                                                        {isDemoMode ? amb.vehicleNumber : amb.id}
+                                                                    </div>
                                                                     <div style={{ fontSize: '0.7rem', color: '#94a3b8', fontWeight: 700, display: 'flex', alignItems: 'center', gap: '4px' }}>
-                                                                        <span>•</span> {amb.distance} away
+                                                                        <span>•</span> {isDemoMode ? amb.currentLocation : amb.distance}
                                                                     </div>
                                                                 </div>
+                                                                {isDemoMode && <div style={{ fontSize: '0.7rem', color: '#64748B', marginTop: '4px' }}>{amb.driverName}</div>}
                                                             </div>
                                                             
-                                                            {amb.status === 'Available' && !assigned ? (
+                                                            {!isDemoMode && amb.status === 'Available' && !assigned ? (
                                                                 <button className="action-btn" onClick={() => { setSelectedAmbulance(amb); setAssignmentLocation(""); }} style={{ padding: '0.7rem 1.2rem', background: '#E8571A', color: '#fff', border: 'none', borderRadius: '10px', fontSize: '0.8rem', fontWeight: 800, cursor: 'pointer' }}>
                                                                     Assign
                                                                 </button>
-                                                            ) : amb.id === assigned ? (
+                                                            ) : !isDemoMode && amb.id === assigned ? (
                                                                 <span style={{ color: '#E8571A', fontSize: '0.85rem', fontWeight: 800 }}>✓ ASSIGNED</span>
                                                             ) : null}
                                                         </div>
@@ -900,6 +1341,232 @@ export default function OperatorDashboard() {
                                 </button>
                             </div>
                         </div>
+                    </div>
+                )}
+
+                {/* 102 Call Modal */}
+                {show102Call && (
+                    <div className="fade-up" style={{ position: 'fixed', inset: 0, zIndex: 100, display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'rgba(15, 23, 42, 0.4)', backdropFilter: 'blur(4px)' }}>
+                        <div style={{ background: '#FFFFFF', padding: '2rem', borderRadius: '16px', width: '480px', maxHeight: '85vh', overflowY: 'auto', boxShadow: '0 20px 50px rgba(0,0,0,0.15)', border: '1.5px solid #E2E8F0' }}>
+                            
+                            {/* Header */}
+                            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '1.5rem' }}>
+                                <h2 style={{ margin: 0, color: '#E8571A', fontSize: '1.6rem', fontWeight: 800, display: 'flex', alignItems: 'center', gap: '8px' }}>
+                                    📞 102 Emergency Call
+                                </h2>
+                                <button 
+                                    onClick={resetCallState}
+                                    style={{ background: '#F1F5F9', border: 'none', borderRadius: '8px', width: '32px', height: '32px', cursor: 'pointer', fontSize: '1.2rem', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#64748B' }}
+                                >
+                                    ✕
+                                </button>
+                            </div>
+
+                            {/* Step Indicator */}
+                            <div style={{ display: 'flex', gap: '8px', marginBottom: '1.5rem' }}>
+                                {['receiving', 'location', 'assigning'].map((step, idx) => (
+                                    <div key={step} style={{ flex: 1, height: '4px', borderRadius: '4px', background: (['receiving', 'location', 'assigning'].indexOf(callState) >= idx) ? '#E8571A' : '#E2E8F0', transition: 'all 0.3s' }} />
+                                ))}
+                            </div>
+
+                            {/* Step 1: Call Receiving */}
+                            {callState === "receiving" && (
+                                <>
+                                    <p style={{ margin: '0 0 1.2rem 0', color: '#64748B', fontSize: '0.95rem' }}>Enter caller information below:</p>
+                                    
+                                    <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem', marginBottom: '1.5rem' }}>
+                                        <div>
+                                            <label style={{ display: 'block', marginBottom: '0.4rem', fontSize: '0.78rem', fontWeight: 700, color: '#334155', textTransform: 'uppercase' }}>Caller Name</label>
+                                            <input 
+                                                type="text" 
+                                                placeholder="e.g. John Doe"
+                                                value={callerName}
+                                                onChange={(e) => setCallerName(e.target.value)}
+                                                style={{ width: '100%', padding: '0.75rem', borderRadius: '8px', border: '1.5px solid #E2E8F0', outline: 'none' }} 
+                                            />
+                                        </div>
+                                        <div>
+                                            <label style={{ display: 'block', marginBottom: '0.4rem', fontSize: '0.78rem', fontWeight: 700, color: '#334155', textTransform: 'uppercase' }}>Caller Phone</label>
+                                            <input 
+                                                type="tel" 
+                                                placeholder="+91 9876543210"
+                                                value={callerPhone}
+                                                onChange={(e) => setCallerPhone(e.target.value)}
+                                                style={{ width: '100%', padding: '0.75rem', borderRadius: '8px', border: '1.5px solid #E2E8F0', outline: 'none' }} 
+                                            />
+                                        </div>
+                                        <div>
+                                            <label style={{ display: 'block', marginBottom: '0.4rem', fontSize: '0.78rem', fontWeight: 700, color: '#334155', textTransform: 'uppercase' }}>Emergency Details</label>
+                                            <textarea 
+                                                placeholder="e.g. Patient has chest pain, difficulty breathing, conscious..."
+                                                value={callDetails}
+                                                onChange={(e) => setCallDetails(e.target.value)}
+                                                style={{ width: '100%', padding: '0.75rem', borderRadius: '8px', border: '1.5px solid #E2E8F0', outline: 'none', fontFamily: "'DM Sans', sans-serif", minHeight: '80px', resize: 'none' }} 
+                                            />
+                                        </div>
+                                    </div>
+
+                                    <button 
+                                        onClick={handle102CallReceived}
+                                        disabled={!callerName || !callerPhone}
+                                        style={{ 
+                                            width: '100%', padding: '0.9rem', background: callerName && callerPhone ? '#E8571A' : '#CBD5E1', 
+                                            color: '#fff', border: 'none', borderRadius: '8px', fontWeight: 700, cursor: callerName && callerPhone ? 'pointer' : 'not-allowed',
+                                            fontFamily: "'DM Sans', sans-serif"
+                                        }}
+                                    >
+                                        Next: Capture Location
+                                    </button>
+                                </>
+                            )}
+
+                            {/* Step 2: Location Capture */}
+                            {callState === "location" && (
+                                <>
+                                    <div style={{ background: '#FFF7ED', border: '1.5px solid #FED7AA', padding: '1rem', borderRadius: '10px', marginBottom: '1.5rem' }}>
+                                        <p style={{ margin: 0, color: '#E8571A', fontWeight: 700, fontSize: '0.95rem' }}>
+                                            📍 Caller: <strong>{callerName}</strong> ({callerPhone})
+                                        </p>
+                                    </div>
+
+                                    <p style={{ margin: '0 0 1.2rem 0', color: '#64748B', fontSize: '0.95rem' }}>
+                                        Click below to capture the patient's location using GPS:
+                                    </p>
+
+                                    {patientLocation && (
+                                        <div style={{ background: '#F0FDF4', border: '1.5px solid #BBF7D0', padding: '1rem', borderRadius: '10px', marginBottom: '1.5rem' }}>
+                                            <p style={{ margin: '0 0 6px 0', color: '#10B981', fontWeight: 700, fontSize: '0.85rem' }}>✓ Location Captured</p>
+                                            <p style={{ margin: 0, color: '#10B981', fontSize: '0.8rem', fontFamily: "'JetBrains Mono', monospace" }}>
+                                                Lat: {patientLocation.lat.toFixed(4)} | Lng: {patientLocation.lng.toFixed(4)}
+                                            </p>
+                                        </div>
+                                    )}
+
+                                    <button 
+                                        onClick={handleCapturePatientLocation}
+                                        style={{ 
+                                            width: '100%', padding: '1rem', marginBottom: '1rem', 
+                                            background: patientLocation ? '#D1FAE5' : '#E8571A', 
+                                            color: patientLocation ? '#059669' : '#fff', 
+                                            border: 'none', borderRadius: '8px', fontWeight: 700, cursor: 'pointer',
+                                            fontFamily: "'DM Sans', sans-serif", fontSize: '0.95rem'
+                                        }}
+                                    >
+                                        {patientLocation ? '✓ Location Captured' : '📍 Capture GPS Location'}
+                                    </button>
+
+                                    <div style={{ display: 'flex', gap: '0.8rem' }}>
+                                        <button 
+                                            onClick={() => setCallState("receiving")}
+                                            style={{ flex: 1, padding: '0.75rem', background: '#F1F5F9', color: '#64748B', border: 'none', borderRadius: '8px', fontWeight: 700, cursor: 'pointer', fontFamily: "'DM Sans', sans-serif" }}
+                                        >
+                                            Back
+                                        </button>
+                                        <button 
+                                            onClick={() => patientLocation && setCallState("assigning")}
+                                            disabled={!patientLocation}
+                                            style={{ 
+                                                flex: 1, padding: '0.75rem', background: patientLocation ? '#E8571A' : '#CBD5E1', 
+                                                color: '#fff', border: 'none', borderRadius: '8px', fontWeight: 700, cursor: patientLocation ? 'pointer' : 'not-allowed',
+                                                fontFamily: "'DM Sans', sans-serif"
+                                            }}
+                                        >
+                                            Next: Assign Ambulance
+                                        </button>
+                                    </div>
+                                </>
+                            )}
+
+                            {/* Step 3: Ambulance Assignment */}
+                            {callState === "assigning" && (
+                                <>
+                                    <div style={{ background: '#FFF7ED', border: '1.5px solid #FED7AA', padding: '1rem', borderRadius: '10px', marginBottom: '1.5rem' }}>
+                                        <p style={{ margin: '0 0 4px 0', color: '#E8571A', fontWeight: 700, fontSize: '0.9rem' }}>
+                                            📍 {callerName}
+                                        </p>
+                                        <p style={{ margin: 0, color: '#E8571A', fontSize: '0.8rem', fontFamily: "'JetBrains Mono', monospace" }}>
+                                            {patientLocation?.lat.toFixed(4)}, {patientLocation?.lng.toFixed(4)}
+                                        </p>
+                                    </div>
+
+                                    <label style={{ display: 'block', marginBottom: '0.8rem', fontSize: '0.85rem', fontWeight: 700, color: '#334155', textTransform: 'uppercase' }}>
+                                        Select Available Ambulance
+                                    </label>
+
+                                    <div style={{ display: 'flex', flexDirection: 'column', gap: '0.8rem', maxHeight: '300px', overflowY: 'auto', marginBottom: '1.5rem' }}>
+                                        {availableAmbulances.length > 0 ? (
+                                            availableAmbulances.map((amb) => (
+                                                <div 
+                                                    key={amb._id || amb.id}
+                                                    onClick={() => setSelectedAmbulanceForCall(amb)}
+                                                    style={{
+                                                        padding: '1rem',
+                                                        border: selectedAmbulanceForCall?._id === amb._id || selectedAmbulanceForCall?.id === amb.id ? '2px solid #E8571A' : '1.5px solid #E2E8F0',
+                                                        borderRadius: '10px',
+                                                        background: selectedAmbulanceForCall?._id === amb._id || selectedAmbulanceForCall?.id === amb.id ? '#FFF7ED' : '#FFFFFF',
+                                                        cursor: 'pointer',
+                                                        transition: 'all 0.2s'
+                                                    }}
+                                                >
+                                                    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                                                        <div>
+                                                            <div style={{ fontWeight: 700, color: '#1E293B', fontSize: '0.95rem' }}>
+                                                                🚑 {amb.plateNumber || amb.id}
+                                                            </div>
+                                                            <div style={{ fontSize: '0.8rem', color: '#94A3B8', marginTop: '2px' }}>
+                                                                ID: {amb._id?.toString().slice(-6) || amb.id}
+                                                            </div>
+                                                        </div>
+                                                        {(selectedAmbulanceForCall?._id === amb._id || selectedAmbulanceForCall?.id === amb.id) && (
+                                                            <span style={{ color: '#E8571A', fontWeight: 700 }}>✓</span>
+                                                        )}
+                                                    </div>
+                                                </div>
+                                            ))
+                                        ) : (
+                                            <div style={{ padding: '2rem 1rem', textAlign: 'center', background: '#F8FAFC', borderRadius: '10px', color: '#94A3B8' }}>
+                                                <p style={{ margin: 0, fontSize: '0.9rem' }}>No available ambulances at the moment</p>
+                                            </div>
+                                        )}
+                                    </div>
+
+                                    <div style={{ display: 'flex', gap: '0.8rem' }}>
+                                        <button 
+                                            onClick={() => setCallState("location")}
+                                            style={{ flex: 1, padding: '0.75rem', background: '#F1F5F9', color: '#64748B', border: 'none', borderRadius: '8px', fontWeight: 700, cursor: 'pointer', fontFamily: "'DM Sans', sans-serif" }}
+                                        >
+                                            Back
+                                        </button>
+                                        <button 
+                                            onClick={handleAssignAmbulanceToPatient}
+                                            disabled={!selectedAmbulanceForCall || isAssigning}
+                                            style={{ 
+                                                flex: 1, padding: '0.75rem', 
+                                                background: selectedAmbulanceForCall && !isAssigning ? '#10B981' : '#CBD5E1', 
+                                                color: '#fff', border: 'none', borderRadius: '8px', fontWeight: 700, 
+                                                cursor: selectedAmbulanceForCall && !isAssigning ? 'pointer' : 'not-allowed',
+                                                fontFamily: "'DM Sans', sans-serif"
+                                            }}
+                                        >
+                                            {isAssigning ? '⏳ Assigning...' : '✓ Assign Ambulance'}
+                                        </button>
+                                    </div>
+                                </>
+                            )}
+                        </div>
+                    </div>
+                )}
+
+                {/* Toast Notification */}
+                {toast && (
+                    <div style={{ 
+                        position: 'fixed', bottom: '1.5rem', right: '1.5rem', zIndex: 9999,
+                        background: '#fff', border: `1px solid ${toast.type === 'success' ? '#D1FAE5' : '#FECACA'}`, 
+                        borderLeft: `4px solid ${toast.type === 'success' ? '#10B981' : '#EF4444'}`,
+                        padding: '1rem 1.4rem', borderRadius: '12px', fontSize: '0.9rem', fontWeight: 600,
+                        boxShadow: '0 8px 32px rgba(0,0,0,0.12)', animation: 'fadeUp 0.35s cubic-bezier(0.34,1.56,0.64,1) both'
+                    }}>
+                        {toast.msg}
                     </div>
                 )}
 
