@@ -1,0 +1,220 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Vehicle Receiver Dashboard</title>
+    <style>
+        body, html { margin: 0; padding: 0; height: 100%; font-family: 'Inter', sans-serif; background-color: #111; color: white; display: flex; flex-direction: column; }
+        header { background-color: #1a1a1a; padding: 20px; text-align: center; border-bottom: 3px solid #333; transition: border-color 0.5s; }
+        h1 { margin: 0; font-size: 1.8rem; }
+        .vehicle-id-selector { margin-top: 10px; }
+        select { padding: 8px; font-size: 1rem; border-radius: 4px; border: 1px solid #333; background: #222; color: white; }
+        
+        main { display: flex; flex: 1; padding: 20px; gap: 20px; }
+        
+        #map-container { flex: 2; border-radius: 12px; overflow: hidden; border: 2px solid #333; position: relative; }
+        #map { width: 100%; height: 100%; }
+        
+        .info-panel { flex: 1; display: flex; flex-direction: column; gap: 20px; }
+        
+        .alert-box { 
+            background: #222; border-radius: 12px; padding: 30px; 
+            text-align: center; border: 2px solid #333; 
+            display: flex; flex-direction: column; justify-content: center; align-items: center;
+            transition: all 0.3s ease; flex: 1;
+        }
+        
+        .alert-box.danger {
+            background-color: rgba(255, 71, 87, 0.1);
+            border-color: #ff4757;
+            box-shadow: 0 0 30px rgba(255, 71, 87, 0.3);
+            animation: pulse 1s infinite alternate;
+        }
+        
+        @keyframes pulse {
+            from { box-shadow: 0 0 10px rgba(255, 71, 87, 0.2); }
+            to { box-shadow: 0 0 40px rgba(255, 71, 87, 0.6); }
+        }
+
+        .icon-container {
+            width: 80px; height: 80px; border-radius: 50%; background: #333;
+            display: flex; justify-content: center; align-items: center; margin-bottom: 20px; font-size: 40px;
+        }
+        .danger .icon-container { background: #ff4757; color: white; }
+
+        #alert-text { font-size: 1.5rem; font-weight: bold; margin: 20px 0; color: #aaa; }
+        .danger #alert-text { color: white; }
+
+        .audio-player { width: 100%; margin-top: 20px; display: none; }
+        .distance-display { font-size: 1.2rem; color: #7bed9f; margin-top: 10px; font-weight: bold; }
+    </style>
+</head>
+<body>
+    <header id="header">
+        <h1>🚗 Smart Vehicle Receiver</h1>
+        <div class="vehicle-id-selector">
+            <label>Select Vehicle Identity: </label>
+            <select id="vehicle-select">
+                <option value="V1">Vehicle 1 (Early Route)</option>
+                <option value="V2">Vehicle 2 (Mid Route)</option>
+                <option value="V3">Vehicle 3 (Late Route)</option>
+            </select>
+        </div>
+    </header>
+
+    <main>
+        <div class="info-panel">
+            <div id="alert-box" class="alert-box">
+                <div class="icon-container">✓</div>
+                <div id="alert-text">No Alerts. Drive Safely.</div>
+                <div class="distance-display" id="distance-display">Ambulance Distance: Waiting...</div>
+                <audio id="audio-player" class="audio-player" controls preload="auto"></audio>
+            </div>
+        </div>
+        <div id="map-container">
+            <div id="map"></div>
+        </div>
+    </main>
+
+    <script src="/shared/config.js"></script>
+    <script src="/shared/distanceUtils.js"></script>
+    <script src="/socket.io/socket.io.js"></script>
+    <script>
+        const script = document.createElement('script');
+        script.src = `https://maps.googleapis.com/maps/api/js?key=${CONFIG.MAPS_API_KEY}&callback=initMap`;
+        script.async = true;
+        script.defer = true;
+        document.head.appendChild(script);
+
+        const socket = io(CONFIG.SERVER_URL);
+        let currentVehicleId = document.getElementById('vehicle-select').value;
+        let map;
+        let myMarker;
+        let ambMarker;
+        let myLocation = { lat: 18.995, lng: 73.115 }; // Fallback
+
+        function registerVehicle() {
+            socket.emit('register_vehicle', { vehicleId: currentVehicleId });
+            console.log(`Registered as ${currentVehicleId}`);
+        }
+
+        document.getElementById('vehicle-select').addEventListener('change', (e) => {
+            currentVehicleId = e.target.value;
+            registerVehicle();
+            resetAlertUI();
+        });
+
+        socket.on('connect', () => {
+            registerVehicle();
+        });
+
+        // The dashboard shares exactly where it placed the vehicles on the route
+        socket.on('vehicle_locations', (locations) => {
+            if (locations[currentVehicleId]) {
+                myLocation = locations[currentVehicleId];
+                if (map && myMarker) {
+                    const pos = new google.maps.LatLng(myLocation.lat, myLocation.lng);
+                    myMarker.setPosition(pos);
+                    map.setCenter(pos);
+                }
+            }
+        });
+
+        socket.on('ambulance_location', (data) => {
+            if (!map) return;
+            
+            if (!ambMarker) {
+                ambMarker = new google.maps.Marker({
+                    map: map,
+                    icon: {
+                        url: 'https://cdn-icons-png.flaticon.com/512/1042/1042861.png',
+                        scaledSize: new google.maps.Size(40, 40)
+                    },
+                    title: 'Approaching Ambulance'
+                });
+            }
+            const pos = new google.maps.LatLng(data.lat, data.lng);
+            ambMarker.setPosition(pos);
+
+            if (myLocation.lat) {
+                const dist = DistanceUtils.calculateDistance(data.lat, data.lng, myLocation.lat, myLocation.lng);
+                document.getElementById('distance-display').innerText = `Ambulance Distance: ${Math.round(dist)}m`;
+            }
+        });
+
+        socket.on('receive_alert', (data) => {
+            console.log('ALERT RECEIVED:', data);
+            triggerAlertUI(data.alert_message, data.audio_url);
+        });
+
+        function triggerAlertUI(message, audioUrl) {
+            const box = document.getElementById('alert-box');
+            const text = document.getElementById('alert-text');
+            const header = document.getElementById('header');
+            const audio = document.getElementById('audio-player');
+            const icon = document.querySelector('.icon-container');
+
+            box.className = 'alert-box danger';
+            header.style.borderColor = '#ff4757';
+            text.innerText = message;
+            icon.innerText = '⚠️';
+
+            audio.src = audioUrl;
+            document.getElementById('distance-display').style.color = 'white';
+            
+            // Allow autoplay logic
+            const playPromise = audio.play();
+            if (playPromise !== undefined) {
+                playPromise.catch(error => {
+                    console.log("Autoplay prevented by browser. Showing controls.", error);
+                    audio.style.display = 'block';
+                });
+            }
+
+            // Restore visual state after 15 seconds
+            setTimeout(() => {
+                resetAlertUI();
+            }, 15000);
+        }
+
+        function resetAlertUI() {
+            const box = document.getElementById('alert-box');
+            const text = document.getElementById('alert-text');
+            const header = document.getElementById('header');
+            const icon = document.querySelector('.icon-container');
+
+            box.className = 'alert-box';
+            header.style.borderColor = '#333';
+            text.innerText = "No Alerts. Drive Safely.";
+            icon.innerText = '✓';
+            document.getElementById('audio-player').style.display = 'none';
+            document.getElementById('distance-display').style.color = '#7bed9f';
+        }
+
+        window.initMap = function() {
+            map = new google.maps.Map(document.getElementById('map'), {
+                zoom: 14,
+                center: myLocation,
+                styles: [
+                    { elementType: "geometry", stylers: [{ color: "#242f3e" }] },
+                    { elementType: "labels.text.stroke", stylers: [{ color: "#242f3e" }] },
+                    { elementType: "labels.text.fill", stylers: [{ color: "#746855" }] },
+                    { featureType: "road", elementType: "geometry", stylers: [{ color: "#38414e" }] },
+                    { featureType: "road", elementType: "geometry.stroke", stylers: [{ color: "#212a37" }] },
+                ],
+                disableDefaultUI: true
+            });
+
+            myMarker = new google.maps.Marker({
+                position: myLocation,
+                map: map,
+                icon: {
+                    path: google.maps.SymbolPath.CIRCLE, scale: 10, fillColor: "#3498db", fillOpacity: 1, strokeWeight: 2, strokeColor: "#ffffff"
+                },
+                title: 'My Vehicle'
+            });
+        };
+    </script>
+</body>
+</html>

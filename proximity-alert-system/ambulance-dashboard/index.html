@@ -1,0 +1,302 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Ambulance Dashboard</title>
+    <style>
+        body, html { margin: 0; padding: 0; height: 100%; font-family: 'Inter', sans-serif; background-color: #111; color: white; }
+        #app-container { display: flex; flex-direction: column; height: 100%; }
+        header { background-color: #1a1a1a; padding: 20px; display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid #333; }
+        h1 { margin: 0; font-size: 1.5rem; color: #ff4757; }
+        #map-container { flex-grow: 1; position: relative; }
+        #map { width: 100%; height: 100%; }
+        .controls { position: absolute; top: 20px; left: 20px; background: rgba(0,0,0,0.8); padding: 15px; border-radius: 8px; z-index: 10; backdrop-filter: blur(10px); }
+        button { background-color: #ff4757; color: white; border: none; padding: 10px 20px; border-radius: 5px; cursor: pointer; font-weight: bold; transition: all 0.3s; }
+        button:hover { background-color: #ff6b81; }
+        .log-panel { position: absolute; bottom: 20px; right: 20px; width: 350px; height: 250px; background: rgba(0,0,0,0.8); border-radius: 8px; z-index: 10; overflow-y: auto; padding: 15px; border: 1px solid #333; backdrop-filter: blur(10px); }
+        .log-entry { margin-bottom: 10px; font-size: 0.9rem; padding-bottom: 10px; border-bottom: 1px solid #333; }
+        .log-entry span { color: #aaa; font-size: 0.8rem; }
+        .alert-active { color: #ff4757; font-weight: bold; }
+    </style>
+</head>
+<body>
+    <div id="app-container">
+        <header>
+            <h1>🚑 Smart Proximity Alert System - Dashboard</h1>
+            <div id="status">Connecting to server...</div>
+        </header>
+        <div id="map-container">
+            <div class="controls">
+                <button id="start-btn">Start Ambulance Simulation</button>
+            </div>
+            <div id="map"></div>
+            <div class="log-panel" id="log-panel">
+                <div style="font-weight: bold; margin-bottom: 15px; color: #ff4757;">System Logs</div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Load config and utils -->
+    <script src="/shared/config.js"></script>
+    <script src="/shared/distanceUtils.js"></script>
+    <script src="/socket.io/socket.io.js"></script>
+    <script>
+        const script = document.createElement('script');
+        script.src = `https://maps.googleapis.com/maps/api/js?key=${CONFIG.MAPS_API_KEY}&libraries=geometry&callback=initMap`;
+        script.async = true;
+        script.defer = true;
+        document.head.appendChild(script);
+
+        // State
+        let map;
+        let directionsService;
+        let directionsRenderer;
+        let ambulanceMarker;
+        let vehicles = [];
+        let routeCoordinates = [];
+        let simulationInterval;
+        let isSimulating = false;
+        const socket = io(CONFIG.SERVER_URL);
+
+        // Cooldown tracking
+        const alertCooldowns = {};
+
+        socket.on('connect', () => {
+            document.getElementById('status').innerText = 'Online - Ready | Server Connected';
+            document.getElementById('status').style.color = '#2ed573';
+            log('Connected to command server.');
+        });
+
+        function log(msg, isAlert = false) {
+            const panel = document.getElementById('log-panel');
+            const entry = document.createElement('div');
+            entry.className = `log-entry ${isAlert ? 'alert-active' : ''}`;
+            const time = new Date().toLocaleTimeString();
+            entry.innerHTML = `<span>[${time}]</span><br/>${msg}`;
+            panel.appendChild(entry);
+            panel.scrollTop = panel.scrollHeight;
+        }
+
+        window.initMap = function() {
+            // Center roughly around Panvel area
+            const startLoc = { lat: 18.9902, lng: 73.1277 }; 
+            
+            map = new google.maps.Map(document.getElementById('map'), {
+                zoom: 14,
+                center: startLoc,
+                styles: [
+                    { elementType: "geometry", stylers: [{ color: "#242f3e" }] },
+                    { elementType: "labels.text.stroke", stylers: [{ color: "#242f3e" }] },
+                    { elementType: "labels.text.fill", stylers: [{ color: "#746855" }] },
+                    { featureType: "administrative.locality", elementType: "labels.text.fill", stylers: [{ color: "#d59563" }] },
+                    { featureType: "poi", elementType: "labels.text.fill", stylers: [{ color: "#d59563" }] },
+                    { featureType: "road", elementType: "geometry", stylers: [{ color: "#38414e" }] },
+                    { featureType: "road", elementType: "geometry.stroke", stylers: [{ color: "#212a37" }] },
+                    { featureType: "road", elementType: "labels.text.fill", stylers: [{ color: "#9ca5b3" }] },
+                    { featureType: "water", elementType: "geometry", stylers: [{ color: "#17263c" }] },
+                    { featureType: "water", elementType: "labels.text.fill", stylers: [{ color: "#515c6d" }] },
+                    { featureType: "water", elementType: "labels.text.stroke", stylers: [{ color: "#17263c" }] }
+                ],
+            });
+
+            directionsService = new google.maps.DirectionsService();
+            directionsRenderer = new google.maps.DirectionsRenderer({
+                map: map,
+                suppressMarkers: true,
+                polylineOptions: { strokeColor: '#ff4757', strokeWeight: 6, strokeOpacity: 0.8 }
+            });
+
+            ambulanceMarker = new google.maps.Marker({
+                position: startLoc,
+                map: map,
+                icon: {
+                    url: 'https://cdn-icons-png.flaticon.com/512/1042/1042861.png',
+                    scaledSize: new google.maps.Size(40, 40)
+                },
+                title: 'Ambulance'
+            });
+
+            // Calculate emergency route
+            calcRoute(
+                { lat: 18.9902, lng: 73.1277 }, 
+                { lat: 19.0191, lng: 73.0423 }
+            );
+        };
+
+        function calcRoute(start, end) {
+            log('Calculating optimal emergency route...');
+            directionsService.route({
+                origin: start,
+                destination: end,
+                travelMode: 'DRIVING'
+            }, (response, status) => {
+                if (status === 'OK') {
+                    directionsRenderer.setDirections(response);
+                    extractPathCoordinates(response);
+                    snapVehiclesToRoute();
+                    log('Route established.');
+                } else {
+                    log('Directions request failed due to ' + status);
+                }
+            });
+        }
+
+        function extractPathCoordinates(directionsResult) {
+            routeCoordinates = [];
+            const route = directionsResult.routes[0].overview_path;
+            
+            for (let i = 0; i < route.length - 1; i++) {
+                const p1 = route[i];
+                const p2 = route[i + 1];
+                const distance = google.maps.geometry.spherical.computeDistanceBetween(p1, p2);
+                const steps = Math.max(1, Math.floor(distance / 20)); 
+                
+                for (let j = 0; j < steps; j++) {
+                    const lat = p1.lat() + (p2.lat() - p1.lat()) * (j / steps);
+                    const lng = p1.lng() + (p2.lng() - p1.lng()) * (j / steps);
+                    routeCoordinates.push({ lat, lng });
+                }
+            }
+            routeCoordinates.push({ lat: route[route.length - 1].lat(), lng: route[route.length - 1].lng() });
+        }
+
+        function snapVehiclesToRoute() {
+            vehicles.forEach(v => { if(v.marker) v.marker.setMap(null); });
+            vehicles = [];
+            
+            if (routeCoordinates.length < 100) return;
+
+            const points = [
+                Math.floor(routeCoordinates.length * 0.3),
+                Math.floor(routeCoordinates.length * 0.6),
+                Math.floor(routeCoordinates.length * 0.8)
+            ];
+
+            const staticVehicleData = {};
+
+            points.forEach((idx, i) => {
+                const vid = `V${i+1}`;
+                const lat = routeCoordinates[idx].lat;
+                const lng = routeCoordinates[idx].lng;
+                
+                vehicles.push({
+                    id: vid,
+                    lat: lat,
+                    lng: lng,
+                    status: 'normal',
+                    marker: new google.maps.Marker({
+                        position: { lat, lng },
+                        map: map,
+                        icon: {
+                            path: google.maps.SymbolPath.CIRCLE,
+                            scale: 8,
+                            fillColor: "#7bed9f",
+                            fillOpacity: 1,
+                            strokeWeight: 2,
+                            strokeColor: "#ffffff"
+                        },
+                        title: `Static Vehicle ${vid}`
+                    })
+                });
+                
+                staticVehicleData[vid] = { lat, lng };
+            });
+
+            // Share exact route locations with any listening vehicle receivers
+            socket.emit('sync_vehicles', staticVehicleData);
+            log('Static vehicles placed along the route.');
+        }
+
+        document.getElementById('start-btn').addEventListener('click', () => {
+            if (isSimulating) return;
+            isSimulating = true;
+            document.getElementById('start-btn').disabled = true;
+            document.getElementById('start-btn').innerText = 'Ambulance in Transit...';
+            log('Starting simulation...');
+            
+            let currentIndex = 0;
+            simulationInterval = setInterval(() => {
+                if (currentIndex >= routeCoordinates.length) {
+                    clearInterval(simulationInterval);
+                    isSimulating = false;
+                    document.getElementById('start-btn').disabled = false;
+                    document.getElementById('start-btn').innerText = 'Start Ambulance Simulation';
+                    log('Ambulance reached destination.');
+                    return;
+                }
+
+                const pos = routeCoordinates[currentIndex];
+                ambulanceMarker.setPosition(pos);
+                map.panTo(pos);
+
+                socket.emit('ambulance_location_update', { lat: pos.lat, lng: pos.lng });
+                checkProximity(pos);
+
+                currentIndex++;
+            }, 100); 
+        });
+
+        async function checkProximity(ambulancePos) {
+            for (let v of vehicles) {
+                const dist = DistanceUtils.calculateDistance(
+                    ambulancePos.lat, ambulancePos.lng,
+                    v.lat, v.lng
+                );
+
+                if (dist < CONFIG.ALERT_DISTANCE_THRESHOLD) {
+                    const now = Date.now();
+                    const lastAlert = alertCooldowns[v.id] || 0;
+                    
+                    if (now - lastAlert > CONFIG.ALERT_COOLDOWN) {
+                        alertCooldowns[v.id] = now;
+                        await triggerAlert(v, dist);
+                    }
+                } else if (dist > CONFIG.ALERT_DISTANCE_THRESHOLD + 100 && v.status === 'alerted') {
+                    v.status = 'normal';
+                    v.marker.setIcon({
+                        path: google.maps.SymbolPath.CIRCLE, scale: 8, fillColor: "#7bed9f", fillOpacity: 1, strokeWeight: 2, strokeColor: "#ffffff"
+                    });
+                }
+            }
+        }
+
+        async function triggerAlert(vehicle, distance) {
+            vehicle.status = 'alerted';
+            vehicle.marker.setIcon({
+                path: google.maps.SymbolPath.CIRCLE, scale: 12, fillColor: "#ff4757", fillOpacity: 1, strokeWeight: 3, strokeColor: "#ffffff"
+            });
+            
+            log(`Proximity alert triggered for ${vehicle.id} (${Math.round(distance)}m).`, true);
+
+            const alertMsg = "Emergency ambulance approaching. Please clear the left lane immediately.";
+
+            try {
+                log(`Generating voice message for ${vehicle.id} via ElevenLabs...`);
+                const response = await fetch(`${CONFIG.SERVER_URL}/api/generate-alert`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ text: alertMsg })
+                });
+
+                if (response.ok) {
+                    const data = await response.json();
+                    
+                    socket.emit('send_alert', {
+                        vehicleId: vehicle.id,
+                        alert_message: alertMsg,
+                        audio_url: CONFIG.SERVER_URL + data.audio_url
+                    });
+                    
+                    log(`Audio generated and alert dispatched to ${vehicle.id}.`, true);
+                } else {
+                    log('Failed to generate audio from ElevenLabs.');
+                }
+            } catch (err) {
+                console.error(err);
+                log('Error connecting to TTS service.');
+            }
+        }
+    </script>
+</body>
+</html>

@@ -57,6 +57,7 @@ export default function OperatorDashboard() {
     const [isAssigning, setIsAssigning] = useState(false);
     const [toast, setToast] = useState<{ msg: string; type: "success" | "error" } | null>(null);
     const [emergencyPriority, setEmergencyPriority] = useState<PriorityLevel>("high");
+    const [selectedSubCategory, setSelectedSubCategory] = useState<string | null>(null);
 
     // ─── Demo Mode State ───
     const [isDemoMode, setIsDemoMode] = useState(false);
@@ -627,8 +628,8 @@ export default function OperatorDashboard() {
                     callerPhone: "Control Room",
                     callerName: "Operator Dispatch",
                     callerLocation: searchedCenter || { lat: 18.5204, lng: 73.8567 },
-                    details: locationStr || "Dispatched via Operator Map",
-                    priority: "high",
+                    details: `${locationStr || "Dispatched via Operator Map"}${selectedSubCategory ? ` [Sub-Category: ${selectedSubCategory}]` : ''}`,
+                    priority: emergencyPriority,
                 })
             });
             const emergencyData = await emergencyRes.json();
@@ -748,8 +749,8 @@ export default function OperatorDashboard() {
                     callerPhone: callerPhone,
                     callerName: callerName,
                     callerLocation: patientLocation,
-                    details: callDetails,
-                    priority: "critical",
+                    details: `${callDetails}${selectedSubCategory ? ` [Sub-Category: ${selectedSubCategory}]` : ''}`,
+                    priority: emergencyPriority,
                 })
             });
 
@@ -1345,42 +1346,90 @@ export default function OperatorDashboard() {
                                 {EMERGENCY_PRIORITIES.map((p) => {
                                     const isSelected = emergencyPriority === p.value;
                                     return (
-                                        <div
-                                            key={p.value}
-                                            onClick={() => setEmergencyPriority(p.value)}
-                                            style={{
-                                                padding: '10px 14px',
-                                                borderRadius: '10px',
-                                                border: isSelected ? `2px solid ${p.color}` : '1.5px solid #E2E8F0',
-                                                background: isSelected ? p.bgColor : '#FFFFFF',
-                                                cursor: 'pointer',
-                                                transition: 'all 0.2s ease',
-                                                display: 'flex',
-                                                alignItems: 'center',
-                                                gap: '12px',
-                                                boxShadow: isSelected ? `0 2px 12px ${p.bgColor}` : 'none',
-                                            }}
-                                        >
-                                            <div style={{
-                                                width: '32px', height: '32px', borderRadius: '8px',
-                                                background: isSelected ? p.color : '#F1F5F9',
-                                                display: 'flex', alignItems: 'center', justifyContent: 'center',
-                                                fontSize: '0.8rem', transition: 'all 0.2s',
-                                                color: isSelected ? '#fff' : '#94A3B8',
-                                                fontWeight: 800,
-                                            }}>
-                                                {p.tier}
-                                            </div>
-                                            <div style={{ flex: 1 }}>
-                                                <div style={{ fontSize: '0.82rem', fontWeight: 800, color: isSelected ? p.color : '#1E293B' }}>
-                                                    {p.emoji} {p.label}
+                                        <div key={p.value}>
+                                            <div
+                                                onClick={() => { setEmergencyPriority(p.value); if (!isSelected) setSelectedSubCategory(null); }}
+                                                style={{
+                                                    padding: '10px 14px',
+                                                    borderRadius: isSelected && p.subCategories?.length ? '10px 10px 0 0' : '10px',
+                                                    border: isSelected ? `2px solid ${p.color}` : '1.5px solid #E2E8F0',
+                                                    borderBottom: isSelected && p.subCategories?.length ? `1px solid ${p.color}30` : undefined,
+                                                    background: isSelected ? p.bgColor : '#FFFFFF',
+                                                    cursor: 'pointer',
+                                                    transition: 'all 0.2s ease',
+                                                    display: 'flex',
+                                                    alignItems: 'center',
+                                                    gap: '12px',
+                                                    boxShadow: isSelected ? `0 2px 12px ${p.bgColor}` : 'none',
+                                                }}
+                                            >
+                                                <div style={{
+                                                    width: '32px', height: '32px', borderRadius: '8px',
+                                                    background: isSelected ? p.color : '#F1F5F9',
+                                                    display: 'flex', alignItems: 'center', justifyContent: 'center',
+                                                    fontSize: '0.8rem', transition: 'all 0.2s',
+                                                    color: isSelected ? '#fff' : '#94A3B8',
+                                                    fontWeight: 800,
+                                                }}>
+                                                    {p.tier}
                                                 </div>
-                                                <div style={{ fontSize: '0.68rem', color: '#94A3B8', marginTop: '1px' }}>
-                                                    {p.description}
+                                                <div style={{ flex: 1 }}>
+                                                    <div style={{ fontSize: '0.82rem', fontWeight: 800, color: isSelected ? p.color : '#1E293B' }}>
+                                                        {p.emoji} {p.label}
+                                                    </div>
+                                                    <div style={{ fontSize: '0.68rem', color: '#94A3B8', marginTop: '1px' }}>
+                                                        {selectedSubCategory && isSelected
+                                                            ? `Selected: ${p.subCategories?.find(s => s.id === selectedSubCategory)?.label || p.description}`
+                                                            : p.description}
+                                                    </div>
                                                 </div>
+                                                {isSelected && (
+                                                    <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                                                        <div style={{ color: p.color, fontWeight: 700, fontSize: '1rem' }}>✓</div>
+                                                        {p.subCategories?.length > 0 && (
+                                                            <div style={{ color: p.color, fontSize: '0.7rem', transition: 'transform 0.2s', transform: isSelected ? 'rotate(180deg)' : 'rotate(0deg)' }}>▼</div>
+                                                        )}
+                                                    </div>
+                                                )}
                                             </div>
-                                            {isSelected && (
-                                                <div style={{ color: p.color, fontWeight: 700, fontSize: '1rem' }}>✓</div>
+                                            {/* Dropdown sub-categories */}
+                                            {isSelected && p.subCategories?.length > 0 && (
+                                                <div style={{
+                                                    border: `2px solid ${p.color}`,
+                                                    borderTop: 'none',
+                                                    borderRadius: '0 0 10px 10px',
+                                                    background: '#FFFFFF',
+                                                    padding: '6px',
+                                                    maxHeight: '180px',
+                                                    overflowY: 'auto',
+                                                    display: 'grid',
+                                                    gridTemplateColumns: '1fr 1fr',
+                                                    gap: '4px',
+                                                }}>
+                                                    {p.subCategories.map((sub) => {
+                                                        const isSubSelected = selectedSubCategory === sub.id;
+                                                        return (
+                                                            <div
+                                                                key={sub.id}
+                                                                onClick={(e) => { e.stopPropagation(); setSelectedSubCategory(isSubSelected ? null : sub.id); }}
+                                                                style={{
+                                                                    padding: '7px 10px',
+                                                                    borderRadius: '7px',
+                                                                    border: isSubSelected ? `1.5px solid ${p.color}` : '1px solid #F1F5F9',
+                                                                    background: isSubSelected ? p.bgColor : '#F8FAFC',
+                                                                    cursor: 'pointer',
+                                                                    transition: 'all 0.15s ease',
+                                                                    display: 'flex',
+                                                                    alignItems: 'center',
+                                                                    gap: '6px',
+                                                                }}
+                                                            >
+                                                                <span style={{ fontSize: '0.85rem' }}>{sub.icon}</span>
+                                                                <span style={{ fontSize: '0.68rem', fontWeight: isSubSelected ? 700 : 500, color: isSubSelected ? p.color : '#475569', lineHeight: 1.2 }}>{sub.label}</span>
+                                                            </div>
+                                                        );
+                                                    })}
+                                                </div>
                                             )}
                                         </div>
                                     );
@@ -1493,44 +1542,92 @@ export default function OperatorDashboard() {
                                                 {EMERGENCY_PRIORITIES.map((p) => {
                                                     const isSelected = emergencyPriority === p.value;
                                                     return (
-                                                        <div
-                                                            key={p.value}
-                                                            onClick={() => setEmergencyPriority(p.value)}
-                                                            style={{
-                                                                padding: '12px 14px',
-                                                                borderRadius: '10px',
-                                                                border: isSelected ? `2px solid ${p.color}` : '1.5px solid #E2E8F0',
-                                                                background: isSelected ? p.bgColor : '#FFFFFF',
-                                                                cursor: 'pointer',
-                                                                transition: 'all 0.2s ease',
-                                                                display: 'flex',
-                                                                alignItems: 'center',
-                                                                gap: '12px',
-                                                                boxShadow: isSelected ? `0 2px 12px ${p.bgColor}` : 'none',
-                                                            }}
-                                                        >
-                                                            <div style={{
-                                                                width: '36px', height: '36px', borderRadius: '10px',
-                                                                background: isSelected ? p.color : '#F1F5F9',
-                                                                display: 'flex', alignItems: 'center', justifyContent: 'center',
-                                                                fontSize: '1rem', transition: 'all 0.2s',
-                                                                color: isSelected ? '#fff' : '#94A3B8',
-                                                                fontWeight: 800,
-                                                            }}>
-                                                                {p.tier}
-                                                            </div>
-                                                            <div style={{ flex: 1 }}>
-                                                                <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
-                                                                    <span style={{ fontSize: '0.85rem', fontWeight: 800, color: isSelected ? p.color : '#1E293B' }}>
-                                                                        {p.emoji} {p.label}
-                                                                    </span>
+                                                        <div key={p.value}>
+                                                            <div
+                                                                onClick={() => { setEmergencyPriority(p.value); if (!isSelected) setSelectedSubCategory(null); }}
+                                                                style={{
+                                                                    padding: '12px 14px',
+                                                                    borderRadius: isSelected && p.subCategories?.length ? '10px 10px 0 0' : '10px',
+                                                                    border: isSelected ? `2px solid ${p.color}` : '1.5px solid #E2E8F0',
+                                                                    borderBottom: isSelected && p.subCategories?.length ? `1px solid ${p.color}30` : undefined,
+                                                                    background: isSelected ? p.bgColor : '#FFFFFF',
+                                                                    cursor: 'pointer',
+                                                                    transition: 'all 0.2s ease',
+                                                                    display: 'flex',
+                                                                    alignItems: 'center',
+                                                                    gap: '12px',
+                                                                    boxShadow: isSelected ? `0 2px 12px ${p.bgColor}` : 'none',
+                                                                }}
+                                                            >
+                                                                <div style={{
+                                                                    width: '36px', height: '36px', borderRadius: '10px',
+                                                                    background: isSelected ? p.color : '#F1F5F9',
+                                                                    display: 'flex', alignItems: 'center', justifyContent: 'center',
+                                                                    fontSize: '1rem', transition: 'all 0.2s',
+                                                                    color: isSelected ? '#fff' : '#94A3B8',
+                                                                    fontWeight: 800,
+                                                                }}>
+                                                                    {p.tier}
                                                                 </div>
-                                                                <div style={{ fontSize: '0.72rem', color: '#94A3B8', marginTop: '2px', lineHeight: 1.3 }}>
-                                                                    {p.description}
+                                                                <div style={{ flex: 1 }}>
+                                                                    <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                                                                        <span style={{ fontSize: '0.85rem', fontWeight: 800, color: isSelected ? p.color : '#1E293B' }}>
+                                                                            {p.emoji} {p.label}
+                                                                        </span>
+                                                                    </div>
+                                                                    <div style={{ fontSize: '0.72rem', color: '#94A3B8', marginTop: '2px', lineHeight: 1.3 }}>
+                                                                        {selectedSubCategory && isSelected
+                                                                            ? `Selected: ${p.subCategories?.find(s => s.id === selectedSubCategory)?.label || p.description}`
+                                                                            : p.description}
+                                                                    </div>
                                                                 </div>
+                                                                {isSelected && (
+                                                                    <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                                                                        <div style={{ color: p.color, fontWeight: 700, fontSize: '1rem' }}>✓</div>
+                                                                        {p.subCategories?.length > 0 && (
+                                                                            <div style={{ color: p.color, fontSize: '0.7rem', transition: 'transform 0.2s', transform: isSelected ? 'rotate(180deg)' : 'rotate(0deg)' }}>▼</div>
+                                                                        )}
+                                                                    </div>
+                                                                )}
                                                             </div>
-                                                            {isSelected && (
-                                                                <div style={{ color: p.color, fontWeight: 700, fontSize: '1rem' }}>✓</div>
+                                                            {/* Dropdown sub-categories */}
+                                                            {isSelected && p.subCategories?.length > 0 && (
+                                                                <div style={{
+                                                                    border: `2px solid ${p.color}`,
+                                                                    borderTop: 'none',
+                                                                    borderRadius: '0 0 10px 10px',
+                                                                    background: '#FFFFFF',
+                                                                    padding: '6px',
+                                                                    maxHeight: '180px',
+                                                                    overflowY: 'auto',
+                                                                    display: 'grid',
+                                                                    gridTemplateColumns: '1fr 1fr',
+                                                                    gap: '4px',
+                                                                }}>
+                                                                    {p.subCategories.map((sub) => {
+                                                                        const isSubSelected = selectedSubCategory === sub.id;
+                                                                        return (
+                                                                            <div
+                                                                                key={sub.id}
+                                                                                onClick={(e) => { e.stopPropagation(); setSelectedSubCategory(isSubSelected ? null : sub.id); }}
+                                                                                style={{
+                                                                                    padding: '7px 10px',
+                                                                                    borderRadius: '7px',
+                                                                                    border: isSubSelected ? `1.5px solid ${p.color}` : '1px solid #F1F5F9',
+                                                                                    background: isSubSelected ? p.bgColor : '#F8FAFC',
+                                                                                    cursor: 'pointer',
+                                                                                    transition: 'all 0.15s ease',
+                                                                                    display: 'flex',
+                                                                                    alignItems: 'center',
+                                                                                    gap: '6px',
+                                                                                }}
+                                                                            >
+                                                                                <span style={{ fontSize: '0.85rem' }}>{sub.icon}</span>
+                                                                                <span style={{ fontSize: '0.68rem', fontWeight: isSubSelected ? 700 : 500, color: isSubSelected ? p.color : '#475569', lineHeight: 1.2 }}>{sub.label}</span>
+                                                                            </div>
+                                                                        );
+                                                                    })}
+                                                                </div>
                                                             )}
                                                         </div>
                                                     );
