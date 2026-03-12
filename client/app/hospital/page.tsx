@@ -1,9 +1,10 @@
 "use client";
 
-import { useState, useEffect, useRef, useCallback } from "react";
+import { useState, useEffect, useRef, useCallback, useMemo } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { io, Socket } from "socket.io-client";
+import { useOperatorTracking } from "../../hooks/useOperatorTracking";
 
 interface Ambulance {
     id: string;
@@ -46,8 +47,9 @@ export default function HospitalDashboard() {
     const [isOpen, setIsOpen] = useState(true);
     const [mapReady, setMapReady] = useState(false);
     const [mapExpanded, setMapExpanded] = useState(false);
-    const [activeTab, setActiveTab] = useState<"fleet" | "requests">("fleet");
+    const [activeTab, setActiveTab] = useState<"fleet" | "requests" | "inbound">("fleet");
     const [trackingMode, setTrackingMode] = useState<"all" | "emergency">("all");
+    const tracking = useOperatorTracking();
     const [time, setTime] = useState(new Date());
     const [hospName, setHospName] = useState("Golden Hour Civil Hospital");
     const [showSettings, setShowSettings] = useState(false);
@@ -62,10 +64,17 @@ export default function HospitalDashboard() {
 
     const [requests, setRequests] = useState<Emergency[]>([]);
 
+    // State for assigned ambulances from dispatch socket
+    const [assignedAmbulances, setAssignedAmbulances] = useState<any[]>([]);
+    const [approachingAlert, setApproachingAlert] = useState<any | null>(null);
+
     const mapRef = useRef<HTMLDivElement>(null);
     const mapObj = useRef<google.maps.Map | null>(null);
     const markersRef = useRef<Record<string, google.maps.Marker>>({});
+    const inboundMarkersRef = useRef<Map<string, google.maps.Marker>>(new Map());
+    const inboundRoutesRef = useRef<Map<string, google.maps.Polyline>>(new Map());
     const socketRef = useRef<Socket | null>(null);
+    const dispatchSocketRef = useRef<Socket | null>(null);
 
     useEffect(() => {
         const t = setInterval(() => setTime(new Date()), 1000);
@@ -155,8 +164,65 @@ export default function HospitalDashboard() {
         const SOCKET_URL = process.env.NEXT_PUBLIC_SOCKET_URL || "http://localhost:5000";
         socketRef.current = io(`${SOCKET_URL}/tracking`);
         socketRef.current.on("ambulance-location", updateFleetMarker);
-        return () => { socketRef.current?.disconnect(); };
+
+        // Initialize dispatch socket for hospital assignments
+        dispatchSocketRef.current = io(`${SOCKET_URL}/dispatch`, {
+            transports: ["websocket", "polling"],
+        });
+
+        dispatchSocketRef.current.on("connect", () => {
+            console.log("[Hospital] Connected to dispatch socket");
+            // Subscribe to this hospital's assignment events
+            dispatchSocketRef.current?.emit("hospital:subscribe", { hospitalName: hospName });
+        });
+
+        dispatchSocketRef.current.on("ambulance:assigned", (data: any) => {
+            console.log("[Hospital] Ambulance assigned:", data);
+            
+            // Add to assigned ambulances list
+            setAssignedAmbulances(prev => {
+                const exists = prev.find(a => a.ambulanceId === data.ambulanceId);
+                if (exists) {
+                    return prev.map(a => a.ambulanceId === data.ambulanceId ? data : a);
+                }
+                return [...prev, data];
+            });
+
+            // Show approaching alert
+            setApproachingAlert({
+                ambulanceId: data.ambulanceId,
+                message: data.message,
+                patientName: data.patientName,
+                priority: data.priority,
+                assignedAt: data.assignedAt,
+            });
+
+            // Toast notification
+            showToast(`🚑 ${data.ambulanceId} is approaching your facility`, "success");
+        });
+
+        dispatchSocketRef.current.on("ambulance:position", (data: any) => {
+            // Update assigned ambulance position
+            setAssignedAmbulances(prev =>
+                prev.map(a => a.ambulanceId === data.ambulanceId ? { ...a, ambulance: data } : a)
+            );
+        });
+
+        return () => { 
+            socketRef.current?.disconnect(); 
+            dispatchSocketRef.current?.disconnect();
+        };
     }, [mapReady]);
+
+    // Update hospital subscription when hospital name changes
+    useEffect(() => {
+        if (dispatchSocketRef.current?.connected) {
+            // Unsubscribe from old hospital name room
+            dispatchSocketRef.current.emit("hospital:unsubscribe", { hospitalName: hospName });
+            // Subscribe to new hospital name room
+            dispatchSocketRef.current.emit("hospital:subscribe", { hospitalName: hospName });
+        }
+    }, [hospName]);
 
     const updateFleetMarker = useCallback((data: any) => {
         if (!mapObj.current) return;
@@ -173,9 +239,70 @@ export default function HospitalDashboard() {
         setFleet(prev => prev.map(a => a.id === vehicleId ? { ...a, location: pos, speed: data.speed, lastUpdate: "Live" } : a));
     }, []);
 
-    const focusAmbulance = (amb: Ambulance) => {
-        if (amb.location && mapObj.current) {
-            mapObj.current.panTo(amb.location);
+    const inboundAmbulances = useMemo(() => {
+        if (!window.google?.maps?.geometry) return tracking.activeAmbulances;
+        return tracking.activeAmbulances.filter(a => {
+            if (!a.destination) return false;
+            // Name match or within 1.5km
+            if (a.destination.name.toLowerCase().includes(hospName.toLowerCase())) return true;
+            const dist = window.google.maps.geometry.spherical.computeDistanceBetween(
+                new window.google.maps.LatLng(a.destination.lat, a.destination.lng),
+                new window.google.maps.LatLng(HOSPITAL_LOCATION.lat, HOSPITAL_LOCATION.lng)
+            );
+            return dist < 1500;
+        });
+    }, [tracking.activeAmbulances, hospName, mapReady]);
+
+    useEffect(() => {
+        if (!mapReady || !mapObj.current || !window.google) return;
+        const map = mapObj.current;
+        const currentIds = new Set(inboundAmbulances.map(a => a.ambulanceId));
+
+        // Cleanup
+        for (const [id, marker] of inboundMarkersRef.current) {
+            if (!currentIds.has(id)) { marker.setMap(null); inboundMarkersRef.current.delete(id); }
+        }
+        for (const [id, polyline] of inboundRoutesRef.current) {
+            if (!currentIds.has(id)) { polyline.setMap(null); inboundRoutesRef.current.delete(id); }
+        }
+
+        const createEmojiIcon = (emoji: string, size = 36) => {
+            return 'data:image/svg+xml;charset=UTF-8,' + encodeURIComponent(
+                `<svg xmlns="http://www.w3.org/2000/svg" width="${size}" height="${size}"><text x="50%" y="50%" dominant-baseline="central" text-anchor="middle" font-size="${size - 8}">${emoji}</text></svg>`
+            );
+        };
+
+        inboundAmbulances.forEach(a => {
+            const pos = { lat: a.lat, lng: a.lng };
+
+            if (!inboundMarkersRef.current.has(a.ambulanceId)) {
+                const marker = new window.google.maps.Marker({
+                    position: pos, map,
+                    icon: { url: createEmojiIcon("🚑", 32), scaledSize: new window.google.maps.Size(32, 32), anchor: new window.google.maps.Point(16, 16) },
+                    zIndex: 150,
+                });
+                inboundMarkersRef.current.set(a.ambulanceId, marker);
+            } else {
+                inboundMarkersRef.current.get(a.ambulanceId)!.setPosition(pos);
+            }
+
+            if (a.routePoints && a.routePoints.length > 0) {
+                if (!inboundRoutesRef.current.has(a.ambulanceId)) {
+                    const polyline = new window.google.maps.Polyline({
+                        path: a.routePoints, map, strokeColor: "#DC2626", strokeWeight: 5, strokeOpacity: 0.8, zIndex: 120,
+                    });
+                    inboundRoutesRef.current.set(a.ambulanceId, polyline);
+                } else {
+                    inboundRoutesRef.current.get(a.ambulanceId)!.setPath(a.routePoints);
+                }
+            }
+        });
+    }, [inboundAmbulances, mapReady]);
+
+    const focusAmbulance = (amb: Ambulance | typeof tracking.activeAmbulances[0]) => {
+        const loc = ('location' in amb) ? amb.location : { lat: (amb as any).lat, lng: (amb as any).lng };
+        if (loc && mapObj.current) {
+            mapObj.current.panTo(loc);
             mapObj.current.setZoom(16);
         }
     };
@@ -773,6 +900,18 @@ export default function HospitalDashboard() {
                                                             // In a real app we would hit an assignment API endpoint here
                                                             setRequests(prev => prev.map(r => r.id === req.id ? { ...r, status: 'Assigned', assignedAmbulance: a.id } : r));
                                                             setFleet(prev => prev.map(f => f.id === a.id ? { ...f, status: 'En Route', patient: req.patientName } : f));
+                                                            
+                                                            // Emit assignment to dispatch socket
+                                                            dispatchSocketRef.current?.emit("hospital:assign-ambulance", {
+                                                                ambulanceId: a.id,
+                                                                hospitalName: hospName,
+                                                                hospitalLat: HOSPITAL_LOCATION.lat,
+                                                                hospitalLng: HOSPITAL_LOCATION.lng,
+                                                                emergencyId: req.id,
+                                                                patientName: req.patientName,
+                                                                priority: req.priority,
+                                                            });
+
                                                             showToast(`✓ ${a.id} dispatched`, 'success');
                                                         } catch(e) {
                                                             showToast('API error dispatching', 'error');
@@ -842,7 +981,29 @@ export default function HospitalDashboard() {
                         <div className="alerts-area">
                             <p className="alerts-label">Alerts & Status</p>
 
-                            {arrivalAlert ? (
+                            {approachingAlert ? (
+                                <div className="alert-card" style={{ animation: 'alertPulse 1.5s ease-in-out infinite alternate' }}>
+                                    <div className="alert-top">
+                                        <div className="alert-dot" />
+                                        <span className="alert-tag">🚑 Assigned & Approaching</span>
+                                    </div>
+                                    <div className="alert-name">Ambulance {approachingAlert.ambulanceId}</div>
+                                    <div className="alert-desc">
+                                        {approachingAlert.message}<br/>
+                                        {approachingAlert.patientName && `Patient: ${approachingAlert.patientName}`}<br/>
+                                        {approachingAlert.priority && `Priority: ${approachingAlert.priority.toUpperCase()}`}
+                                    </div>
+                                    <div className="alert-eta">
+                                        <div className="alert-eta-label">Live Feed Status</div>
+                                        <div className="alert-eta-val" style={{ fontSize: '1rem', fontWeight: 600 }}>
+                                            📍 En Route
+                                        </div>
+                                    </div>
+                                    <div style={{ marginTop: '10px', padding: '8px 10px', background: '#fff7ed', border: '1px solid #fed7aa', borderRadius: '8px', fontSize: '0.75rem', color: '#E8571A' }}>
+                                        ✓ Live location tracking active
+                                    </div>
+                                </div>
+                            ) : arrivalAlert ? (
                                 <div className="alert-card">
                                     <div className="alert-top">
                                         <div className="alert-dot" />
@@ -862,6 +1023,20 @@ export default function HospitalDashboard() {
                                     <div className="empty-sub">No inbound emergencies</div>
                                 </div>
                             )}
+
+                            {/* Show additional assigned ambulances */}
+                            {assignedAmbulances.length > 0 && assignedAmbulances.map((amb, i) => (
+                                <div key={amb.ambulanceId} className="alert-card" style={{ marginTop: '8px', opacity: 0.8 }}>
+                                    <div className="alert-top">
+                                        <div className="live-dot" style={{ background: '#10B981' }} />
+                                        <span className="alert-tag" style={{ color: '#10B981' }}>Assigned</span>
+                                    </div>
+                                    <div className="alert-name">{amb.ambulanceId}</div>
+                                    <div className="alert-desc" style={{ fontSize: '0.72rem', marginTop: '4px' }}>
+                                        {amb.patientName && `📋 ${amb.patientName}`}
+                                    </div>
+                                </div>
+                            ))}
 
                             {/* Fleet overview removed as requested */}
                         </div>

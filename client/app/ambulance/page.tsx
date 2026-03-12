@@ -1,7 +1,7 @@
 // app/ambulance/page.tsx
 "use client";
 
-import { useState, useEffect, useCallback, useRef } from "react";
+import { useState, useEffect, useCallback, useRef, useMemo } from "react";
 import dynamic from "next/dynamic";
 import { useLocation } from "../../hooks/useLocation";
 import { useNearbyHospitals } from "../../hooks/useNearbyHospitals";
@@ -15,6 +15,7 @@ import { Location, Hospital } from "../../types";
 import { useToast } from "../../hooks/useToast";
 import DashboardStats from "../../components/DashboardStats";
 import { useJsApiLoader } from "@react-google-maps/api";
+import { useDispatchBroadcast } from "../../hooks/useDispatchBroadcast";
 
 const MapView = dynamic(() => import("../../components/MapView"), { ssr: false });
 
@@ -170,6 +171,13 @@ export default function AmbulancePage() {
   const activeEmergencies = isEmergencyActive ? 1 : 0;
   const greenSignalsActivated = isEmergencyActive ? 4 : 0;
 
+  // ─── Dispatch broadcast (real-time sync with operator dashboard) ───
+  const ambulanceId = useMemo(() => `AMB-${Date.now().toString(36).toUpperCase()}`, []);
+  const { broadcastActivation, broadcastPosition, broadcastDeactivation } = useDispatchBroadcast({
+    ambulanceId,
+    isActive: isEmergencyActive,
+  });
+
   useEffect(() => {
     let timer: NodeJS.Timeout;
     if (!location) {
@@ -296,6 +304,16 @@ export default function AmbulancePage() {
       setRoutePoints(leg1Route.path);
       setDirectionsResult(leg1Route.result);
       setIsEmergencyActive(true);
+
+      // Broadcast activation to operator dashboard
+      broadcastActivation({
+        lat: depot.lat,
+        lng: depot.lng,
+        destination: { lat: destination.lat, lng: destination.lng, name: destinationName },
+        routePoints: leg1Route.path,
+        currentLeg: 'depot-to-patient',
+      });
+
       showToast("Emergency Activated! Ambulance en route to patient.", "success");
     } catch (err) {
       showToast(`Failed to generate route: ${err}`, "warning");
@@ -334,6 +352,31 @@ export default function AmbulancePage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [location]);
 
+  // ─── Broadcast position to operator dashboard every 1s ───
+  useEffect(() => {
+    if (!isEmergencyActive || !sim.ambulancePosition) return;
+
+    const interval = setInterval(() => {
+      if (!sim.ambulancePosition) return;
+      broadcastPosition({
+        lat: sim.ambulancePosition.lat,
+        lng: sim.ambulancePosition.lng,
+        bearing: sim.bearing,
+        speed: sim.speedKmh,
+        eta: sim.etaMinutes,
+        remainingM: sim.remainingDistanceM,
+        destination: { lat: destination.lat, lng: destination.lng, name: destinationName },
+        routePoints,
+        currentLeg,
+        progressPercent: sim.progressPercent,
+      });
+    }, 1000);
+
+    return () => clearInterval(interval);
+  }, [isEmergencyActive, sim.ambulancePosition, sim.bearing, sim.speedKmh,
+      sim.etaMinutes, sim.remainingDistanceM, sim.progressPercent,
+      destination, destinationName, routePoints, currentLeg, broadcastPosition]);
+
   const handleCancel = async () => {
     showToast("Terminating Green Corridor...", "warning");
     setIsEmergencyActive(false);
@@ -343,6 +386,9 @@ export default function AmbulancePage() {
     setAmbulanceAtPatient(false);
     setAmbulanceDepot(STATIC_DEPOT);
     sim.resetSimulation();
+
+    // Broadcast deactivation to operator dashboard
+    broadcastDeactivation();
   };
 
   const handleChangeHospital = () => {
