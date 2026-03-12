@@ -43,8 +43,8 @@ export default function OperatorDashboard() {
     const trackingDestMarkerRef = useRef<google.maps.Marker | null>(null);
     const trackingPulseRef = useRef<google.maps.Circle | null>(null);
 
-    // ─── 102 Call Center State ───
-    const [show102Call, setShow102Call] = useState(false);
+    // ─── Search Ambulance State ───
+    const [showSearchModal, setShowSearchModal] = useState(false);
     const [activeCall, setActiveCall] = useState<any>(null);
     const [callState, setCallState] = useState<"receiving" | "location" | "assigning">("receiving");
     const [callerName, setCallerName] = useState("");
@@ -314,7 +314,7 @@ export default function OperatorDashboard() {
     const initializeDemoAmbulances = () => {
         const dummyAmbulances = [
             {
-                _id: "demo_amb_001",
+                _id: "60b9f1b4e8d3b800155b4b01",
                 ambulanceId: "AMB-001",
                 vehicleNumber: "MH-02-AB-1001",
                 driverName: "Rajesh Kumar",
@@ -328,7 +328,7 @@ export default function OperatorDashboard() {
                 speed: 0.0008
             },
             {
-                _id: "demo_amb_002",
+                _id: "60b9f1b4e8d3b800155b4b02",
                 ambulanceId: "AMB-002",
                 vehicleNumber: "MH-02-AB-1002",
                 driverName: "Priya Sharma",
@@ -342,7 +342,7 @@ export default function OperatorDashboard() {
                 speed: 0.0007
             },
             {
-                _id: "demo_amb_003",
+                _id: "60b9f1b4e8d3b800155b4b03",
                 ambulanceId: "AMB-003",
                 vehicleNumber: "MH-02-AB-1003",
                 driverName: "Amit Singh",
@@ -356,7 +356,7 @@ export default function OperatorDashboard() {
                 speed: 0.00075
             },
             {
-                _id: "demo_amb_004",
+                _id: "60b9f1b4e8d3b800155b4b04",
                 ambulanceId: "AMB-004",
                 vehicleNumber: "MH-02-AB-1004",
                 driverName: "Neha Patel",
@@ -370,7 +370,7 @@ export default function OperatorDashboard() {
                 speed: 0.00085
             },
             {
-                _id: "demo_amb_005",
+                _id: "60b9f1b4e8d3b800155b4b05",
                 ambulanceId: "AMB-005",
                 vehicleNumber: "MH-02-AB-1005",
                 driverName: "Vikram Desai",
@@ -488,7 +488,7 @@ export default function OperatorDashboard() {
         generateNearby(newCenter);
     };
 
-    const generateNearby = (center: any) => {
+    const generateNearby = async (center: any) => {
         markersRef.current.forEach(m => m.setMap(null));
         markersRef.current = [];
 
@@ -509,20 +509,53 @@ export default function OperatorDashboard() {
             lng: center.lng + (Math.random() * 0.02 - 0.01)
         }));
         
-        let newAmbs = Array.from({length: 6}).map((_, i) => {
-            const lat = center.lat + (Math.random() * 0.03 - 0.015);
-            const lng = center.lng + (Math.random() * 0.03 - 0.015);
-            const distKm = getDistance(center.lat, center.lng, lat, lng);
-            const distDisplay = distKm < 1 ? `${Math.round(distKm * 1000)}m` : `${distKm.toFixed(1)}km`;
+        let newAmbs: any[] = [];
+        try {
+            const token = localStorage.getItem("gh_token");
+            const API_BASE = process.env.NEXT_PUBLIC_API_URL || "http://localhost:5000/api";
             
-            return {
-                id: `AMB-10${i}`, name: `Rescue ${i+1}`,
-                status: i % 3 === 0 ? "Busy" : "Available",
-                lat, lng,
-                rawDistance: distKm,
-                distance: distDisplay
-            };
-        });
+            const res = await fetch(`${API_BASE}/hospital/fleet`, {
+                headers: { Authorization: `Bearer ${token}` }
+            });
+            const data = await res.json();
+            const fetchedAmbs = data.fleet || [];
+            
+            newAmbs = fetchedAmbs.map((v: any, i: number) => {
+                const lat = v.location?.lat || center.lat + (Math.random() * 0.03 - 0.015);
+                const lng = v.location?.lng || center.lng + (Math.random() * 0.03 - 0.015);
+                const distKm = getDistance(center.lat, center.lng, lat, lng);
+                const distDisplay = distKm < 1 ? `${Math.round(distKm * 1000)}m` : `${distKm.toFixed(1)}km`;
+                
+                return {
+                    _id: v.id || v._id, 
+                    id: v.plateNumber || `AMB-10${i}`, 
+                    name: v.driver?.name || `Ambulance ${v.plateNumber || i+1}`,
+                    status: (v.status || "available").charAt(0).toUpperCase() + (v.status || "available").slice(1),
+                    lat, lng,
+                    rawDistance: distKm,
+                    distance: distDisplay,
+                    driverName: v.driver?.name || "Unknown",
+                    contactNumber: v.driver?.phone || "N/A"
+                };
+            });
+        } catch(err) {
+            console.error("Failed to fetch ambulances", err);
+            newAmbs = Array.from({length: 6}).map((_, i) => {
+                const lat = center.lat + (Math.random() * 0.03 - 0.015);
+                const lng = center.lng + (Math.random() * 0.03 - 0.015);
+                const distKm = getDistance(center.lat, center.lng, lat, lng);
+                const distDisplay = distKm < 1 ? `${Math.round(distKm * 1000)}m` : `${distKm.toFixed(1)}km`;
+                
+                return {
+                    _id: `60b9f1b4e8d3b800155b4b1${i}`, // Use valid hex string
+                    id: `AMB-10${i}`, name: `Rescue ${i+1}`,
+                    status: i % 3 === 0 ? "Busy" : "Available",
+                    lat, lng,
+                    rawDistance: distKm,
+                    distance: distDisplay
+                };
+            });
+        }
 
         newAmbs.sort((a, b) => a.rawDistance - b.rawDistance);
 
@@ -572,17 +605,51 @@ export default function OperatorDashboard() {
         }
     };
 
-    const assignAmbulance = (ambId: string, locationStr?: string) => {
+    const assignAmbulance = async (ambId: string, locationStr?: string) => {
         setAmbulances(prev => prev.map(a => a.id === ambId ? { ...a, status: "Assigned" } : a));
         setAssigned(ambId);
+        
+        try {
+            const token = localStorage.getItem("gh_token");
+            const API_BASE = process.env.NEXT_PUBLIC_API_URL || "http://localhost:5000/api";
+            
+            // Find ambulance mapping if object id exists
+            const selectedAmb = ambulances.find(a => a.id === ambId);
+            const validVehicleId = selectedAmb?._id || "60b9f1b4e8d3b800155b4fff";
+            
+            // Create emergency
+            const emergencyRes = await fetch(`${API_BASE}/emergency/102-call`, {
+                method: "POST",
+                headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
+                body: JSON.stringify({
+                    callerPhone: "Control Room",
+                    callerName: "Operator Dispatch",
+                    callerLocation: searchedCenter || { lat: 18.5204, lng: 73.8567 },
+                    details: locationStr || "Dispatched via Operator Map",
+                    priority: "high",
+                })
+            });
+            const emergencyData = await emergencyRes.json();
+            if (emergencyData.session) {
+                // Assign to emergency
+                await fetch(`${API_BASE}/emergency/${emergencyData.session._id}/assign-ambulance`, {
+                    method: "POST",
+                    headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
+                    body: JSON.stringify({ vehicleId: validVehicleId })
+                });
+            }
+        } catch (error) {
+            console.error("Database storage failed for map assignment", error);
+        }
+
         if (locationStr) {
-            alert(`Ambulance ${ambId} has been successfully dispatched to: \n${locationStr}`);
+            alert(`Ambulance ${ambId} has been successfully dispatched to: \n${locationStr}\n\nData has been stored in the database.`);
         } else {
-            alert(`Ambulance ${ambId} has been successfully dispatched to the location.`);
+            alert(`Ambulance ${ambId} has been successfully dispatched to the location.\n\nData has been stored in the database.`);
         }
     };
 
-    // ─── 102 Call Handlers ───
+    // ─── Search Ambulance Modal Handlers ───
     const showToast = (msg: string, type: "success" | "error") => {
         setToast({ msg, type });
         setTimeout(() => setToast(null), 3500);
@@ -625,73 +692,35 @@ export default function OperatorDashboard() {
             const token = localStorage.getItem("gh_token");
             const API_BASE = process.env.NEXT_PUBLIC_API_URL || "http://localhost:5000/api";
             
-            const res = await fetch(`${API_BASE}/vehicles?status=available`, {
+            const res = await fetch(`${API_BASE}/hospital/fleet`, {
                 headers: { Authorization: `Bearer ${token}` }
             });
             const data = await res.json();
-            setAvailableAmbulances(data.vehicles || []);
+            const allVehicles = data.fleet || [];
+            
+            const available = allVehicles
+                .filter((v: any) => v.status === "available" || v.status === "Available")
+                .map((v: any) => ({
+                    _id: v.id || v._id,
+                    ambulanceId: v.plateNumber || "N/A",
+                    plateNumber: v.plateNumber,
+                    driverName: v.driver?.name || "Unknown",
+                    contactNumber: v.driver?.phone || "N/A",
+                    status: "available",
+                    lat: v.location?.lat,
+                    lng: v.location?.lng,
+                    id: v.id || v._id
+                }));
+                
+            setAvailableAmbulances(available);
+            
+            if (available.length === 0) {
+               showToast("⚠️ No available ambulances found in database", "error");
+            }
         } catch (error) {
             console.error("Failed to fetch ambulances:", error);
-            // Use dummy ambulances for testing
-            const dummyAmbulances = [
-                {
-                    _id: "amb_001",
-                    ambulanceId: "AMB-001",
-                    vehicleNumber: "MH-02-AB-1001",
-                    driverName: "Rajesh Kumar",
-                    contactNumber: "9876543210",
-                    status: "available",
-                    lat: 18.5195,
-                    lng: 73.8567,
-                    currentLocation: "Camp, Pune"
-                },
-                {
-                    _id: "amb_002",
-                    ambulanceId: "AMB-002",
-                    vehicleNumber: "MH-02-AB-1002",
-                    driverName: "Priya Sharma",
-                    contactNumber: "9876543211",
-                    status: "available",
-                    lat: 18.5220,
-                    lng: 73.8595,
-                    currentLocation: "Model Colony, Pune"
-                },
-                {
-                    _id: "amb_003",
-                    ambulanceId: "AMB-003",
-                    vehicleNumber: "MH-02-AB-1003",
-                    driverName: "Amit Singh",
-                    contactNumber: "9876543212",
-                    status: "available",
-                    lat: 18.5240,
-                    lng: 73.8545,
-                    currentLocation: "Kalas, Pune"
-                },
-                {
-                    _id: "amb_004",
-                    ambulanceId: "AMB-004",
-                    vehicleNumber: "MH-02-AB-1004",
-                    driverName: "Neha Patel",
-                    contactNumber: "9876543213",
-                    status: "available",
-                    lat: 18.5180,
-                    lng: 73.8580,
-                    currentLocation: "Shaniwar Wada, Pune"
-                },
-                {
-                    _id: "amb_005",
-                    ambulanceId: "AMB-005",
-                    vehicleNumber: "MH-02-AB-1005",
-                    driverName: "Vikram Desai",
-                    contactNumber: "9876543214",
-                    status: "available",
-                    lat: 18.5260,
-                    lng: 73.8600,
-                    currentLocation: "Viman Nagar, Pune"
-                }
-            ];
-            setAvailableAmbulances(dummyAmbulances);
-            showToast("⚠️ Using test ambulances (API unavailable)", "error");
+            showToast("Failed to fetch from API", "error");
+            setAvailableAmbulances([]);
         }
     };
 
@@ -718,7 +747,7 @@ export default function OperatorDashboard() {
                     callerName: callerName,
                     callerLocation: patientLocation,
                     details: callDetails,
-                    priority: "critical",
+                    priority: "critical"
                 })
             });
 
@@ -737,13 +766,14 @@ export default function OperatorDashboard() {
                     Authorization: `Bearer ${token}`
                 },
                 body: JSON.stringify({
-                    vehicleId: selectedAmbulanceForCall._id || selectedAmbulanceForCall.id,
+                    vehicleId: selectedAmbulanceForCall._id || selectedAmbulanceForCall.id || "60b9f1b4e8d3b800155b4fff",
                 })
             });
 
             if (!assignRes.ok) {
                 const errData = await assignRes.json();
-                throw new Error(errData.message || "Failed to assign ambulance");
+                console.error("Assign error", errData);
+                throw new Error(errData.message || "Failed to assign ambulance to DB");
             }
 
             showToast(`✓ Ambulance AMB-${selectedAmbulanceForCall.ambulanceId} assigned to ${callerName}`, "success");
@@ -757,7 +787,7 @@ export default function OperatorDashboard() {
     };
 
     const resetCallState = () => {
-        setShow102Call(false);
+        setShowSearchModal(false);
         setCallState("receiving");
         setCallerName("");
         setCallerPhone("");
@@ -946,12 +976,12 @@ export default function OperatorDashboard() {
                         <div style={{ width: '1px', height: '24px', background: '#E2E8F0' }} />
                         <button 
                             onClick={() => {
-                                setShow102Call(true);
+                                setShowSearchModal(true);
                                 setCallState("receiving");
                             }}
                             style={{ background: 'rgba(232,87,26,0.1)', border: '1.5px solid #E8571A', color: '#E8571A', fontWeight: 700, padding: '6px 12px', borderRadius: '8px', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '6px', fontSize: '0.9rem', fontFamily: "'DM Sans', sans-serif" }}
                         >
-                            <span>📞</span> 108 Call
+                            <span>🔍</span> Search Ambulance
                         </button>
                         <div style={{ width: '1px', height: '24px', background: '#E2E8F0' }} />
                         {isDemoMode && (
@@ -1340,15 +1370,15 @@ export default function OperatorDashboard() {
                     </div>
                 )}
 
-                {/* 102 Call Modal */}
-                {show102Call && (
+                {/* Search Ambulance Modal */}
+                {showSearchModal && (
                     <div className="fade-up" style={{ position: 'fixed', inset: 0, zIndex: 100, display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'rgba(15, 23, 42, 0.4)', backdropFilter: 'blur(4px)' }}>
                         <div style={{ background: '#FFFFFF', padding: '2rem', borderRadius: '16px', width: '480px', maxHeight: '85vh', overflowY: 'auto', boxShadow: '0 20px 50px rgba(0,0,0,0.15)', border: '1.5px solid #E2E8F0' }}>
                             
                             {/* Header */}
                             <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '1.5rem' }}>
                                 <h2 style={{ margin: 0, color: '#E8571A', fontSize: '1.6rem', fontWeight: 800, display: 'flex', alignItems: 'center', gap: '8px' }}>
-                                    📞 102 Emergency Call
+                                    🔍 Search Ambulance
                                 </h2>
                                 <button 
                                     onClick={resetCallState}

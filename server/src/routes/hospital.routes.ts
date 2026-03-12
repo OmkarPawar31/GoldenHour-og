@@ -45,7 +45,7 @@ router.get("/fleet", async (req: AuthRequest, res: Response) => {
         session: session
           ? {
               id: session._id,
-              patientName: (session.userId as any)?.name || "Unknown",
+              patientName: session.callerName || (session.userId as any)?.name || "Unknown",
               patientPhone: (session.userId as any)?.phone || "",
               priority: session.priority,
               origin: session.origin,
@@ -139,7 +139,7 @@ router.get("/requests", async (req: AuthRequest, res: Response) => {
 
     const requests = sessions.map((s: any) => ({
       id: s._id,
-      patientName: s.userId?.name || "Unknown Patient",
+      patientName: s.callerName || s.userId?.name || "Unknown Patient",
       priority: s.priority.charAt(0).toUpperCase() + s.priority.slice(1), // Capitalize
       location: `${s.origin.lat.toFixed(4)}, ${s.origin.lng.toFixed(4)}`,
       carNumber: s.vehicleId?.plateNumber || "N/A",

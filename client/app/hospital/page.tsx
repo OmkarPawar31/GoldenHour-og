@@ -843,7 +843,19 @@ export default function HospitalDashboard() {
                                                         try {
                                                             const token = localStorage.getItem("gh_token");
                                                             const url = process.env.NEXT_PUBLIC_API_URL || "http://localhost:5000/api";
-                                                            // In a real app we would hit an assignment API endpoint here
+                                                            
+                                                            // Persist to MongoDB
+                                                            const assignRes = await fetch(`${url}/emergency/${req.id}/assign-ambulance`, {
+                                                                method: "POST",
+                                                                headers: { 
+                                                                    "Content-Type": "application/json", 
+                                                                    Authorization: `Bearer ${token}` 
+                                                                },
+                                                                body: JSON.stringify({ vehicleId: a.id })
+                                                            });
+
+                                                            if (!assignRes.ok) throw new Error("Database assignment failed");
+
                                                             setRequests(prev => prev.map(r => r.id === req.id ? { ...r, status: 'Assigned', assignedAmbulance: a.id } : r));
                                                             setFleet(prev => prev.map(f => f.id === a.id ? { ...f, status: 'En Route', patient: req.patientName } : f));
                                                             
@@ -860,6 +872,7 @@ export default function HospitalDashboard() {
 
                                                             showToast(`✓ ${a.id} dispatched`, 'success');
                                                         } catch(e) {
+                                                                console.error("Assignment error:", e);
                                                             showToast('API error dispatching', 'error');
                                                         }
                                                     } else {

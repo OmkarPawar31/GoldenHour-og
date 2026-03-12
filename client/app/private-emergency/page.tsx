@@ -317,7 +317,10 @@ export default function PrivateEmergencyDashboard() {
       fetch(`${API_BASE}/emergency`, {
         method: "POST",
         headers: { "Content-Type": "application/json", "Authorization": `Bearer ${token}` },
-        body: JSON.stringify({ origin: ORIGIN, destination: DESTINATION }),
+        body: JSON.stringify({ 
+          origin: ORIGIN, 
+          destination: DESTINATION 
+        }),
       })
         .then(r => r.json())
         .then(data => {
@@ -989,6 +992,8 @@ export default function PrivateEmergencyDashboard() {
               </div>
             </div>
           </div>
+
+
 
           {/* Action button */}
           <div className="act-wrap">
