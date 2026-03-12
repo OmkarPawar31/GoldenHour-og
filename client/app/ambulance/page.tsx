@@ -6,16 +6,20 @@ import dynamic from "next/dynamic";
 import { useLocation } from "../../hooks/useLocation";
 import { useNearbyHospitals } from "../../hooks/useNearbyHospitals";
 import { useDirectionsRoute } from "../../hooks/useDirectionsRoute";
+import { useAmbulanceProximityAlert } from "../../hooks/useAmbulanceProximityAlert";
+import { useElevenLabsVoice } from "../../hooks/useElevenLabsVoice";
 import HospitalCard from "../../components/HospitalCard";
 import RouteInfoBar from "../../components/RouteInfoBar";
 import HospitalSearch from "../../components/HospitalSearch";
-import { useAmbulanceSimulation } from "../../hooks/useAmbulanceSimulation";
+import { useAmbulanceSimulation, DummyCar } from "../../hooks/useAmbulanceSimulation";
 import { haversineMeters } from "../../utils/geoUtils";
 import { Location, Hospital } from "../../types";
 import { useToast } from "../../hooks/useToast";
 import DashboardStats from "../../components/DashboardStats";
 import { useJsApiLoader } from "@react-google-maps/api";
 import { useDispatchBroadcast } from "../../hooks/useDispatchBroadcast";
+import { SOCKET_URL } from "../../utils/constants";
+import { io } from "socket.io-client";
 
 const MapView = dynamic(() => import("../../components/MapView"), { ssr: false });
 
@@ -43,6 +47,38 @@ function generateNearbyDepot(origin: Location): Location {
 
 // Default static depot (fallback)
 const STATIC_DEPOT: Location = { lat: 18.9934, lng: 73.1215 };
+
+// Generate dummy cars (nearby traffic) for simulation
+function generateDummyCars(origin: Location, count: number = 3): DummyCar[] {
+  const dummyCars: DummyCar[] = [];
+
+  for (let i = 0; i < count; i++) {
+    // Generate random distance between 0.5km and 1.5km
+    const distKm = 0.5 + Math.random() * 1.0;
+    const bearingDeg = Math.random() * 360;
+    const R = 6371;
+    const lat1 = (origin.lat * Math.PI) / 180;
+    const lng1 = (origin.lng * Math.PI) / 180;
+    const brng = (bearingDeg * Math.PI) / 180;
+    const lat2 = Math.asin(
+      Math.sin(lat1) * Math.cos(distKm / R) +
+      Math.cos(lat1) * Math.sin(distKm / R) * Math.cos(brng)
+    );
+    const lng2 = lng1 + Math.atan2(
+      Math.sin(brng) * Math.sin(distKm / R) * Math.cos(lat1),
+      Math.cos(distKm / R) - Math.sin(lat1) * Math.sin(lat2)
+    );
+
+    dummyCars.push({
+      id: `CAR-${i}-${Date.now()}`,
+      lat: (lat2 * 180) / Math.PI,
+      lng: (lng2 * 180) / Math.PI,
+      alerted: false,
+    });
+  }
+
+  return dummyCars;
+}
 
 // ── Toast Notification Component ──
 function ToastNotifications({
@@ -86,16 +122,39 @@ async function generateRouteFallback(
   origin: { lat: number; lng: number },
   dest: { lat: number; lng: number }
 ): Promise<{ lat: number; lng: number }[]> {
-  const response = await fetch(
-    `https://router.project-osrm.org/route/v1/driving/${origin.lng},${origin.lat};${dest.lng},${dest.lat}?overview=full&geometries=geojson`
-  );
-  if (!response.ok) throw new Error("OSRM failed");
-  const data = await response.json();
-  if (data.code !== "Ok" || !data.routes || data.routes.length === 0) throw new Error("OSRM no match");
-  return data.routes[0].geometry.coordinates.map((c: number[]) => ({
-    lat: c[1],
-    lng: c[0],
-  }));
+  try {
+    const response = await fetch(
+      `https://router.project-osrm.org/route/v1/driving/${origin.lng},${origin.lat};${dest.lng},${dest.lat}?overview=full&geometries=geojson&steps=true`
+    );
+
+    if (!response.ok) {
+      throw new Error(`OSRM HTTP ${response.status}`);
+    }
+
+    const data = await response.json();
+
+    if (data.code !== "Ok") {
+      throw new Error(`OSRM code: ${data.code}`);
+    }
+
+    if (!data.routes || data.routes.length === 0) {
+      throw new Error("OSRM returned no routes");
+    }
+
+    const path = data.routes[0].geometry.coordinates.map((c: number[]) => ({
+      lat: c[1],
+      lng: c[0],
+    }));
+
+    console.log("[OSRM] Route successful:", path.length, "points");
+    return path;
+  } catch (err) {
+    console.error("[OSRM] Failed:", err instanceof Error ? err.message : String(err));
+
+    // Final fallback: Create direct path from origin to destination
+    console.log("[Fallback] Creating direct path");
+    return [origin, dest];
+  }
 }
 
 async function generateRoute(
@@ -103,6 +162,7 @@ async function generateRoute(
   dest: { lat: number; lng: number }
 ): Promise<{ path: { lat: number; lng: number }[]; result: google.maps.DirectionsResult | null }> {
   if (!window.google || !window.google.maps) {
+    console.warn("[Route] Google Maps not loaded, using OSRM");
     const path = await generateRouteFallback(origin, dest);
     return { path, result: null };
   }
@@ -117,6 +177,7 @@ async function generateRoute(
       },
       async (result, status) => {
         if (status === "OK" && result) {
+          console.log("[Google] Route successful");
           const path: { lat: number; lng: number }[] = [];
           result.routes[0].legs.forEach((leg) => {
             leg.steps.forEach((step) => {
@@ -137,12 +198,14 @@ async function generateRoute(
 
           resolve({ path, result });
         } else {
-          console.warn("Directions API failed (" + status + "). Falling back to OSRM...");
+          console.warn(`[Google] Directions API failed (${status}). Falling back to OSRM...`);
           try {
             const fallbackPath = await generateRouteFallback(origin, dest);
             resolve({ path: fallbackPath, result: null });
           } catch (err) {
-            reject(status);
+            console.error("[Fallback] All routing methods failed:", err);
+            // Still resolve with direct path so ambulance can animate
+            resolve({ path: [origin, dest], result: null });
           }
         }
       }
@@ -167,6 +230,9 @@ export default function AmbulancePage() {
   const [isEmergencyActive, setIsEmergencyActive] = useState(false);
   const [ambulanceDepot, setAmbulanceDepot] = useState<Location>(STATIC_DEPOT);
   const { toasts, showToast, dismissToast } = useToast();
+  const { speak } = useElevenLabsVoice();
+  const [dummyCars, setDummyCars] = useState<DummyCar[]>([]);
+
   const realGpsLocation = origin || FALLBACK_GPS;
   const activeEmergencies = isEmergencyActive ? 1 : 0;
   const greenSignalsActivated = isEmergencyActive ? 4 : 0;
@@ -223,6 +289,50 @@ export default function AmbulancePage() {
     setMapInstance(map);
   }, []);
 
+  // Listen for dispatches from private emergencies or hospitals
+  useEffect(() => {
+    const dispatchSocket = io(`${SOCKET_URL}/dispatch`, {
+      transports: ["websocket", "polling"],
+    });
+
+    dispatchSocket.on("ambulance:dispatch", async (data: any) => {
+      // If it's specifically for this ambulance or a general broadcast we can take
+      console.log("[Ambulance] Received dispatch request:", data);
+      
+      showToast(`🚨 DISPATCH: ${data.patientName || 'Emergency'} nearby!`, "error");
+      
+      if (data.location) {
+        // Auto-activate for the patient location
+        const patientLoc = data.location;
+        const depot = realGpsLocation; // Start from current location
+        setAmbulanceDepot(depot);
+        setCurrentLeg('depot-to-patient');
+        setAmbulanceAtPatient(false);
+        setIsEmergencyActive(true);
+
+        try {
+          const leg1Route = await generateRoute(depot, patientLoc);
+          setRoutePoints(leg1Route.path);
+          setDirectionsResult(leg1Route.result);
+          
+          broadcastActivation({
+            lat: depot.lat,
+            lng: depot.lng,
+            destination: { lat: destination.lat, lng: destination.lng, name: destinationName },
+            routePoints: leg1Route.path,
+            currentLeg: 'depot-to-patient',
+          });
+        } catch (err) {
+          showToast("Failed to route to dispatched location", "warning");
+        }
+      }
+    });
+
+    return () => {
+      dispatchSocket.disconnect();
+    };
+  }, [ambulanceId, showToast, realGpsLocation, destination, destinationName, broadcastActivation]);
+
   // Fetch hospitals once when origin is ready
   useEffect(() => {
     if (!origin || hospitalsFetched.current) return;
@@ -267,6 +377,28 @@ export default function AmbulancePage() {
       }
     }
   });
+
+  // ─── Proximity Alert: Detect when ambulance is near patient and show dummy cars ───
+  const proximityAlert = useAmbulanceProximityAlert(
+    isEmergencyActive && currentLeg === 'depot-to-patient' ? realGpsLocation : null,
+    { thresholdMeters: 1000, enableVoice: false, checkIntervalMs: 1000 }
+  );
+
+  // Generate and update dummy cars when ambulance is nearby
+  useEffect(() => {
+    if (proximityAlert.isNearby && isEmergencyActive && currentLeg === 'depot-to-patient') {
+      // Generate dummy cars once when proximity is detected
+      if (dummyCars.length === 0) {
+        const newDummyCars = generateDummyCars(realGpsLocation, 3);
+        setDummyCars(newDummyCars);
+        showToast("⚠️ Nearby traffic detected - slow down", "warning");
+        speak("Ambulance approaching nearby patients location. Nearby traffic detected, please reduce speed.");
+      }
+    } else if (!proximityAlert.isNearby && dummyCars.length > 0) {
+      // Clear dummy cars when ambulance moves away
+      setDummyCars([]);
+    }
+  }, [proximityAlert.isNearby, isEmergencyActive, currentLeg, dummyCars.length, realGpsLocation, showToast, speak]);
 
   const handleHospitalSelect = (hospital: { lat: number; lng: number; name: string; address: string; id?: string } | Hospital) => {
     const h = 'location' in hospital
@@ -573,6 +705,7 @@ export default function AmbulancePage() {
                 onMapLoad={handleMapLoad}
                 ambulanceDepot={ambulanceDepot}
                 currentLeg={currentLeg}
+                dummyCars={dummyCars}
               />
             ) : (
               <div className="w-full h-full flex flex-col items-center justify-center bg-[#0B1221]">

@@ -140,6 +140,7 @@ export default function DriverDashboard() {
   const { isLoaded: isMapLoaded } = useJsApiLoader({
     id: 'google-map-script',
     googleMapsApiKey: process.env.NEXT_PUBLIC_GOOGLE_MAPS_API_KEY || "",
+    libraries: ["places", "geometry"],
   });
 
   // Track which ambulances we've already alerted for (cooldown)

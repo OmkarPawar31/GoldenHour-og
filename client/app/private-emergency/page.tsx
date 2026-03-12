@@ -1,14 +1,32 @@
 "use client";
 
-import { useState, useEffect, useRef, useCallback } from "react";
+import { useState, useEffect, useRef, useCallback, useMemo } from "react";
+import dynamic from "next/dynamic";
 import Link from "next/link";
 import { io, Socket } from "socket.io-client";
+import { useNearbyHospitals } from "../../hooks/useNearbyHospitals";
+import { useJsApiLoader } from "@react-google-maps/api";
+import HospitalCard from "../../components/HospitalCard";
+import HospitalSearch from "../../components/HospitalSearch";
+import { useDirectionsRoute } from "../../hooks/useDirectionsRoute";
+import RouteInfoBar from "../../components/RouteInfoBar";
+import { useAmbulanceSimulation, DummyCar } from "../../hooks/useAmbulanceSimulation";
+import { useElevenLabsVoice } from "../../hooks/useElevenLabsVoice";
+import { useAmbulanceProximityAlert } from "../../hooks/useAmbulanceProximityAlert";
+import { SOCKET_URL } from "../../utils/constants";
+import { Hospital, Location } from "../../types";
+import { useLocation } from "../../hooks/useLocation";
+import { useToast } from "../../hooks/useToast";
+import { useDispatchBroadcast } from "../../hooks/useDispatchBroadcast";
+import DashboardStats from "../../components/DashboardStats";
+
+const MapView = dynamic(() => import("../../components/MapView"), { ssr: false });
+
+type SessionState = "idle" | "pending" | "active" | "terminating";
 
 /* ─────────────────────────────────────────────────────────
    TYPES
 ───────────────────────────────────────────────────────── */
-type SessionState = "idle" | "pending" | "active" | "terminating";
-
 interface LogEntry {
   time: string;
   msg: string;
@@ -20,25 +38,15 @@ interface NearbyAmbulance {
   distance: string;
   eta: string;
   status: "en-route" | "available" | "busy";
+  lat?: number;
+  lng?: number;
 }
-
-declare global {
-  interface Window {
-    google: typeof google;
-    initGoldenHourPrivateMap: () => void;
-  }
-}
-
-/* ─────────────────────────────────────────────────────────
-   Google Maps API Key (from .env)
-───────────────────────────────────────────────────────── */
-const MAPS_API_KEY = process.env.NEXT_PUBLIC_GOOGLE_MAPS_API_KEY || "";
 
 /* ─────────────────────────────────────────────────────────
    CONSTANTS
 ───────────────────────────────────────────────────────── */
-const ORIGIN = { lat: 18.5204, lng: 73.8567 };
-const DESTINATION = { lat: 18.5314, lng: 73.8446 };
+const FALLBACK_GPS: Location = { lat: 18.9894, lng: 73.1175 };
+const DEFAULT_HOSPITAL = { lat: 18.9904, lng: 73.1165 };
 
 function nowStr() {
   return new Date().toLocaleTimeString("en-IN", {
@@ -47,34 +55,134 @@ function nowStr() {
 }
 
 /* ─────────────────────────────────────────────────────────
-   MAP DARK STYLE
-───────────────────────────────────────────────────────── */
-const MAP_STYLES: google.maps.MapTypeStyle[] = [
-  { elementType: "geometry", stylers: [{ color: "#0a1628" }] },
-  { elementType: "labels.text.fill", stylers: [{ color: "#8a9bb5" }] },
-  { elementType: "labels.text.stroke", stylers: [{ color: "#050c1a" }] },
-  { featureType: "road", elementType: "geometry", stylers: [{ color: "#0f2040" }] },
-  { featureType: "road", elementType: "geometry.stroke", stylers: [{ color: "#162840" }] },
-  { featureType: "road.highway", elementType: "geometry", stylers: [{ color: "#162840" }] },
-  { featureType: "water", elementType: "geometry", stylers: [{ color: "#060e1c" }] },
-  { featureType: "poi", stylers: [{ visibility: "off" }] },
-  { featureType: "transit", stylers: [{ visibility: "off" }] },
-  { featureType: "landscape", elementType: "geometry", stylers: [{ color: "#08121e" }] },
-  { featureType: "administrative", elementType: "geometry.stroke", stylers: [{ color: "#1a3050" }] },
-];
-
-/* ─────────────────────────────────────────────────────────
    SIMULATED NEARBY AMBULANCES
 ───────────────────────────────────────────────────────── */
-function generateNearbyAmbulances(): NearbyAmbulance[] {
+function calculateStartingPoint(origin: Location, distanceStr: string): Location {
+  const distKm = parseFloat(distanceStr) || 1.0;
+  const bearing = Math.random() * 360 * (Math.PI / 180);
+  const R = 6371;
+  const lat1 = (origin.lat * Math.PI) / 180;
+  const lng1 = (origin.lng * Math.PI) / 180;
+  const lat2 = Math.asin(Math.sin(lat1) * Math.cos(distKm / R) + Math.cos(lat1) * Math.sin(distKm / R) * Math.cos(bearing));
+  const lng2 = lng1 + Math.atan2(Math.sin(bearing) * Math.sin(distKm / R) * Math.cos(lat1), Math.cos(distKm / R) - Math.sin(lat1) * Math.sin(lat2));
+  return { lat: (lat2 * 180) / Math.PI, lng: (lng2 * 180) / Math.PI };
+}
+
+function generateNearbyAmbulances(origin: Location): NearbyAmbulance[] {
   const statuses: NearbyAmbulance["status"][] = ["en-route", "available", "busy"];
   const count = Math.floor(1 + Math.random() * 3);
-  return Array.from({ length: count }, (_, i) => ({
-    id: `AMB-${String(101 + i).padStart(3, "0")}`,
-    distance: `${(0.3 + Math.random() * 2.5).toFixed(1)} km`,
-    eta: `${Math.floor(2 + Math.random() * 8)} min`,
-    status: statuses[Math.floor(Math.random() * statuses.length)],
-  }));
+  return Array.from({ length: count }, (_, i) => {
+    const distanceStr = `${(0.3 + Math.random() * 6).toFixed(1)} km`;
+    const loc = calculateStartingPoint(origin, distanceStr);
+    return {
+      id: `AMB-${String(101 + i).padStart(3, "0")}`,
+      distance: distanceStr,
+      eta: `${Math.floor(2 + Math.random() * 8)} min`,
+      status: statuses[Math.floor(Math.random() * statuses.length)],
+      lat: loc.lat,
+      lng: loc.lng
+    };
+  });
+}
+
+// Generate dummy cars (nearby traffic) for simulation — same as ambulance page
+function generateDummyCars(origin: Location, count: number = 3): DummyCar[] {
+  const dummyCars: DummyCar[] = [];
+  for (let i = 0; i < count; i++) {
+    const distKm = 0.5 + Math.random() * 1.0;
+    const bearingDeg = Math.random() * 360;
+    const R = 6371;
+    const lat1 = (origin.lat * Math.PI) / 180;
+    const lng1 = (origin.lng * Math.PI) / 180;
+    const brng = (bearingDeg * Math.PI) / 180;
+    const lat2 = Math.asin(
+      Math.sin(lat1) * Math.cos(distKm / R) +
+      Math.cos(lat1) * Math.sin(distKm / R) * Math.cos(brng)
+    );
+    const lng2 = lng1 + Math.atan2(
+      Math.sin(brng) * Math.sin(distKm / R) * Math.cos(lat1),
+      Math.cos(distKm / R) - Math.sin(lat1) * Math.sin(lat2)
+    );
+    dummyCars.push({
+      id: `CAR-${i}-${Date.now()}`,
+      lat: (lat2 * 180) / Math.PI,
+      lng: (lng2 * 180) / Math.PI,
+      alerted: false,
+    });
+  }
+  return dummyCars;
+}
+
+/* ─────────────────────────────────────────────────────────
+   ROUTE GENERATION — Same as ambulance page
+───────────────────────────────────────────────────────── */
+async function generateRouteFallback(
+  origin: { lat: number; lng: number },
+  dest: { lat: number; lng: number }
+): Promise<{ lat: number; lng: number }[]> {
+  try {
+    const response = await fetch(
+      `https://router.project-osrm.org/route/v1/driving/${origin.lng},${origin.lat};${dest.lng},${dest.lat}?overview=full&geometries=geojson&steps=true`
+    );
+    if (!response.ok) throw new Error(`OSRM HTTP ${response.status}`);
+    const data = await response.json();
+    if (data.code !== "Ok") throw new Error(`OSRM code: ${data.code}`);
+    if (!data.routes || data.routes.length === 0) throw new Error("OSRM returned no routes");
+    const path = data.routes[0].geometry.coordinates.map((c: number[]) => ({
+      lat: c[1], lng: c[0],
+    }));
+    console.log("[OSRM] Route successful:", path.length, "points");
+    return path;
+  } catch (err) {
+    console.error("[OSRM] Failed:", err instanceof Error ? err.message : String(err));
+    console.log("[Fallback] Creating direct path");
+    return [origin, dest];
+  }
+}
+
+async function generateRoute(
+  origin: { lat: number; lng: number },
+  dest: { lat: number; lng: number }
+): Promise<{ path: { lat: number; lng: number }[]; result: google.maps.DirectionsResult | null }> {
+  if (!window.google || !window.google.maps) {
+    console.warn("[Route] Google Maps not loaded, using OSRM");
+    const path = await generateRouteFallback(origin, dest);
+    return { path, result: null };
+  }
+
+  return new Promise((resolve) => {
+    const svc = new window.google.maps.DirectionsService();
+    svc.route(
+      { origin, destination: dest, travelMode: window.google.maps.TravelMode.DRIVING },
+      async (result, status) => {
+        if (status === "OK" && result) {
+          console.log("[Google] Route successful");
+          const path: { lat: number; lng: number }[] = [];
+          result.routes[0].legs.forEach((leg) => {
+            leg.steps.forEach((step) => {
+              if (step.path && Array.isArray(step.path)) {
+                step.path.forEach((p) => { path.push({ lat: p.lat(), lng: p.lng() }); });
+              }
+            });
+          });
+          if (path.length === 0 && result.routes[0].overview_path) {
+            result.routes[0].overview_path.forEach((p) => {
+              path.push({ lat: p.lat(), lng: p.lng() });
+            });
+          }
+          resolve({ path, result });
+        } else {
+          console.warn(`[Google] Directions API failed (${status}). Falling back to OSRM...`);
+          try {
+            const fallbackPath = await generateRouteFallback(origin, dest);
+            resolve({ path: fallbackPath, result: null });
+          } catch (_) {
+            resolve({ path: [origin, dest], result: null });
+          }
+        }
+      }
+    );
+  });
 }
 
 /* ─────────────────────────────────────────────────────────
@@ -82,33 +190,81 @@ function generateNearbyAmbulances(): NearbyAmbulance[] {
 ───────────────────────────────────────────────────────── */
 export default function PrivateEmergencyDashboard() {
 
-  /* ── state ── */
+  /* ── Core state (mirrors ambulance page) ── */
+  const { location, error: gpsError } = useLocation();
+  const [gpsFallbackTriggered, setGpsFallbackTriggered] = useState(false);
   const [session, setSession] = useState<SessionState>("idle");
-  const [elapsed, setElapsed] = useState(0);
-  const [speed, setSpeed] = useState(0);
-  const [gps, setGps] = useState(ORIGIN);
-  const [etaText, setEtaText] = useState("--");
-  const [distText, setDistText] = useState("--");
-  const [nearbyCount, setNearbyCount] = useState(0);
-  const [log, setLog] = useState<LogEntry[]>([]);
-  const [showConfirm, setShowConfirm] = useState(false);
-  const [mapReady, setMapReady] = useState(false);
 
-  /* private-specific */
-  const [plateNumber, setPlateNumber]       = useState("");
+  const demoMode = !location && gpsFallbackTriggered;
+  const origin = location || (gpsFallbackTriggered ? FALLBACK_GPS : null);
+  const realGpsLocation = origin || FALLBACK_GPS;
+
+  const [destination, setDestination] = useState(DEFAULT_HOSPITAL);
+  const [destinationName, setDestinationName] = useState("Civil Hospital");
+  const [routePoints, setRoutePoints] = useState<{ lat: number; lng: number }[]>([]);
+  const [directionsResult, setDirectionsResult] = useState<google.maps.DirectionsResult | null>(null);
+  const [ambulanceAtPatient, setAmbulanceAtPatient] = useState(false);
+  const [currentLeg, setCurrentLeg] = useState<'depot-to-patient' | 'patient-to-hospital' | 'idle'>('idle');
+  const [ambulanceDepot, setAmbulanceDepot] = useState<Location | null>(null);
+  const [dummyCars, setDummyCars] = useState<DummyCar[]>([]);
+  const [selectedHospitalId, setSelectedHospitalId] = useState<string | null>(null);
+
+  const { showToast, toasts, dismissToast } = useToast();
+  const { speak } = useElevenLabsVoice();
+  const [log, setLog] = useState<LogEntry[]>([]);
+  const logRef = useRef<HTMLDivElement>(null);
+
+  /* Private-specific state */
+  const [plateNumber, setPlateNumber] = useState("");
   const [plateSubmitted, setPlateSubmitted] = useState(false);
-  const [patientName, setPatientName]       = useState("");
-  const [patientPhone, setPatientPhone]     = useState("");
-  const [severity, setSeverity]             = useState("");
+  const [patientName, setPatientName] = useState("");
+  const [patientPhone, setPatientPhone] = useState("");
+  const [severity, setSeverity] = useState("");
   const [nearbyAmbulances, setNearbyAmbulances] = useState<NearbyAmbulance[]>([]);
-  const [adminApproved, setAdminApproved]       = useState(false);
+  const [adminApproved, setAdminApproved] = useState(false);
   const [backendSessionId, setBackendSessionId] = useState<string | null>(null);
+  const [elapsed, setElapsed] = useState(0);
+  const [showConfirm, setShowConfirm] = useState(false);
+
+  const { isLoaded } = useJsApiLoader({
+    id: "google-map-script",
+    googleMapsApiKey: process.env.NEXT_PUBLIC_GOOGLE_MAPS_API_KEY || "",
+    libraries: ["places", "geometry"],
+  });
+
+  const { hospitals, setHospitals, fetchHospitals, resetAndRetry, loading: searchingHospitals, error: hospitalsError } = useNearbyHospitals();
+  const { directions, routeInfo, fetchRoute } = useDirectionsRoute();
+  const hospitalsFetched = useRef(false);
+  const lastRerouteTime = useRef<number>(0);
+  const [mapInstance, setMapInstance] = useState<google.maps.Map | null>(null);
+
+  const selectedHospital = hospitals.find(h => h.id === selectedHospitalId) || null;
+
+  const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const ambulanceRefresh = useRef<ReturnType<typeof setInterval> | null>(null);
+  const socketRef = useRef<Socket | null>(null);
+
+  // ─── Dispatch broadcast (same as ambulance page) ───
+  const ambulanceId = useMemo(() => `PVT-${Date.now().toString(36).toUpperCase()}`, []);
+  const { broadcastActivation, broadcastPosition, broadcastDeactivation } = useDispatchBroadcast({
+    ambulanceId,
+    isActive: session === "active",
+  });
+
+  /* ── helpers ── */
+  const addLog = useCallback((msg: string, type: LogEntry["type"] = "info") => {
+    setLog(prev => [...prev.slice(-49), { time: nowStr(), msg, type }]);
+  }, []);
+
+  useEffect(() => {
+    if (logRef.current) logRef.current.scrollTop = logRef.current.scrollHeight;
+  }, [log]);
 
   /* ── Auto-load from Emergency modal (sessionStorage) ── */
   useEffect(() => {
-    const name  = sessionStorage.getItem("em_name")     || "";
-    const phone = sessionStorage.getItem("em_phone")    || "";
-    const plate = sessionStorage.getItem("em_plate")    || "";
+    const name  = sessionStorage.getItem("em_name") || "";
+    const phone = sessionStorage.getItem("em_phone") || "";
+    const plate = sessionStorage.getItem("em_plate") || "";
     const sev   = sessionStorage.getItem("em_severity") || "";
     if (name || plate) {
       setPatientName(name);
@@ -116,157 +272,201 @@ export default function PrivateEmergencyDashboard() {
       setPlateNumber(plate);
       setSeverity(sev);
       setPlateSubmitted(true);
-      /* clear so page refresh doesn't re-submit */
       ["em_name","em_phone","em_plate","em_severity","em_destination"].forEach(k => sessionStorage.removeItem(k));
     }
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
+  // GPS fallback timeout (same as ambulance page)
+  useEffect(() => {
+    let timer: NodeJS.Timeout;
+    if (!location) {
+      timer = setTimeout(() => {
+        setGpsFallbackTriggered(true);
+      }, 4000);
+    }
+    return () => clearTimeout(timer);
+  }, [location]);
 
-
-  /* ── refs ── */
-  const mapRef = useRef<HTMLDivElement>(null);
-  const mapObj = useRef<google.maps.Map | null>(null);
-  const vehicleMarker = useRef<google.maps.Marker | null>(null);
-  const corridorPoly = useRef<google.maps.Polyline | null>(null);
-  const geofenceCircle = useRef<google.maps.Circle | null>(null);
-  const destMarker = useRef<google.maps.Marker | null>(null);
-  const routePath = useRef<google.maps.LatLng[]>([]);
-  const routeIndex = useRef(0);
-  const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);
-  const moveRef = useRef<ReturnType<typeof setInterval> | null>(null);
-  const ambulanceRefresh = useRef<ReturnType<typeof setInterval> | null>(null);
-  const logRef = useRef<HTMLDivElement>(null);
-  const socketRef = useRef<Socket | null>(null);
-
-  /* ── helpers ── */
-  const addLog = useCallback((msg: string, type: LogEntry["type"] = "info") => {
-    setLog(prev => [...prev.slice(-49), { time: nowStr(), msg, type }]);
+  const handleMapLoad = useCallback((map: google.maps.Map) => {
+    setMapInstance(map);
   }, []);
 
-  /* auto-scroll log */
+  /* ── Fetch hospitals once when origin is ready ── */
   useEffect(() => {
-    if (logRef.current) logRef.current.scrollTop = logRef.current.scrollHeight;
-  }, [log]);
+    if (!origin || hospitalsFetched.current) return;
+    hospitalsFetched.current = true;
+    fetchHospitals(null, origin);
+  }, [origin, fetchHospitals]);
 
-  /* refresh nearby ambulances periodically */
+  /* ── Auto-select nearest hospital ── */
   useEffect(() => {
-    setNearbyAmbulances(generateNearbyAmbulances());
+    if (hospitals.length === 0) return;
+    setSelectedHospitalId((prev) => {
+      const stillExists = hospitals.find((h) => h.id === prev);
+      const newId = stillExists ? prev : hospitals[0].id;
+      const newHospitalData = hospitals.find(h => h.id === newId);
+      if (newHospitalData) {
+        setDestination({ lat: newHospitalData.location.lat, lng: newHospitalData.location.lng });
+        setDestinationName(newHospitalData.name);
+      }
+      return newId;
+    });
+  }, [hospitals]);
+
+  /* ── Refresh nearby ambulances periodically ── */
+  useEffect(() => {
+    setNearbyAmbulances(generateNearbyAmbulances(realGpsLocation));
     ambulanceRefresh.current = setInterval(() => {
-      setNearbyAmbulances(generateNearbyAmbulances());
+      setNearbyAmbulances(generateNearbyAmbulances(realGpsLocation));
     }, 8000);
     return () => { if (ambulanceRefresh.current) clearInterval(ambulanceRefresh.current); };
-  }, []);
+  }, [realGpsLocation]);
 
-  /* ── Load Google Maps SDK ── */
+  // Route useEffect — auto-route on first hospital load (same as ambulance page)
   useEffect(() => {
-    if (!MAPS_API_KEY) {
-      addLog("Add NEXT_PUBLIC_GOOGLE_MAPS_API_KEY to .env", "error");
-      return;
+    if (!origin || !selectedHospital || hospitalsFetched.current === false) return;
+    if (!routeInfo && session !== "active") {
+      fetchRoute(origin, selectedHospital.location);
     }
-    if (window.google?.maps) { setMapReady(true); return; }
+  }, [selectedHospital, origin, routeInfo, session, fetchRoute]);
 
-    window.initGoldenHourPrivateMap = () => setMapReady(true);
+  /* ═══════════════════════════════════════════════════════
+     CORE ROUTING — Same 2-leg algorithm as ambulance page
+     Leg 1: depot → patient
+     Leg 2: patient → hospital
+  ═══════════════════════════════════════════════════════ */
 
-    const script = document.createElement("script");
-    script.src = `https://maps.googleapis.com/maps/api/js?key=${MAPS_API_KEY}&libraries=geometry,places&callback=initGoldenHourPrivateMap`;
-    script.async = true;
-    script.defer = true;
-    document.head.appendChild(script);
-    return () => { document.head.removeChild(script); };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+  // When simulation completes leg 1 (depot→patient), start leg 2 (patient→hospital)
+  const handleLegComplete = useCallback(async () => {
+    if (currentLeg === 'depot-to-patient') {
+      showToast("🚑 Ambulance reached patient! Routing to hospital...", "success");
+      addLog("✓ Ambulance arrived at patient location!", "success");
+      addLog("📋 Patient onboard - Securing patient...", "info");
+      speak("Ambulance has arrived at patient location. Now routing to hospital.");
+      setAmbulanceAtPatient(true);
+      setCurrentLeg('patient-to-hospital');
 
-  /* ── Init map ── */
-  useEffect(() => {
-    if (!mapReady || !mapRef.current || mapObj.current) return;
+      const selectedHosp = hospitals.find(h => h.id === selectedHospitalId) || hospitals[0];
+      const hospDest = selectedHosp
+        ? { lat: selectedHosp.location.lat, lng: selectedHosp.location.lng }
+        : destination;
+      const hospName = selectedHosp?.name || destinationName;
 
-    const map = new window.google.maps.Map(mapRef.current, {
-      center: ORIGIN,
-      zoom: 14,
-      styles: MAP_STYLES,
-      disableDefaultUI: false,
-      zoomControl: true,
-      streetViewControl: false,
-      mapTypeControl: false,
-      fullscreenControl: false,
-    });
-    mapObj.current = map;
+      addLog(`🚑 PHASE 2: En-Route to ${hospName}`, "success");
 
-    destMarker.current = new window.google.maps.Marker({
-      position: DESTINATION,
-      map,
-      title: "Civil Hospital",
-      icon: {
-        path: window.google.maps.SymbolPath.CIRCLE,
-        fillColor: "#34D399",
-        fillOpacity: 1,
-        strokeColor: "#34D399",
-        strokeWeight: 2,
-        scale: 10,
-      },
-    });
+      try {
+        const routeData = await generateRoute(realGpsLocation, hospDest);
+        setRoutePoints(routeData.path);
+        setDirectionsResult(routeData.result);
+        addLog(`Route to hospital: ${routeData.path.length} points`, "info");
 
-    addLog("Map initialised", "success");
-    addLog("GPS lock acquired", "success");
-  }, [mapReady, addLog]);
-
-  /* ── Place / move vehicle marker ── */
-  const placeVehicle = useCallback(
-    (pos: google.maps.LatLng | google.maps.LatLngLiteral, heading = 0) => {
-      if (!mapObj.current) return;
-      const icon: google.maps.Symbol = {
-        path: window.google.maps.SymbolPath.FORWARD_CLOSED_ARROW,
-        fillColor: "#FFB347",
-        fillOpacity: 1,
-        strokeColor: "#FFB347",
-        strokeWeight: 2,
-        scale: 7,
-        rotation: heading,
-      };
-      if (vehicleMarker.current) {
-        vehicleMarker.current.setPosition(pos);
-        vehicleMarker.current.setIcon(icon);
-      } else {
-        vehicleMarker.current = new window.google.maps.Marker({
-          position: pos, map: mapObj.current,
-          title: plateNumber || "PRIVATE", icon, zIndex: 100,
+        broadcastActivation({
+          lat: realGpsLocation.lat,
+          lng: realGpsLocation.lng,
+          destination: { lat: hospDest.lat, lng: hospDest.lng, name: hospName },
+          routePoints: routeData.path,
+          currentLeg: 'patient-to-hospital',
         });
+      } catch (err) {
+        showToast(`Failed to generate route to hospital: ${err}`, "warning");
+        addLog(`Route error: ${err}`, "error");
       }
-    },
-    [plateNumber]
+    } else if (currentLeg === 'patient-to-hospital') {
+      showToast("🏥 Ambulance arrived at hospital! Patient delivered safely.", "success");
+      addLog("🏥 Patient delivered to hospital safely!", "success");
+      speak("Patient has been delivered to the hospital safely.");
+      setCurrentLeg('idle');
+    }
+  }, [currentLeg, realGpsLocation, destination, destinationName, hospitals, selectedHospitalId, showToast, addLog, speak, broadcastActivation]);
+
+  const sim = useAmbulanceSimulation({
+    routePoints,
+    realGpsLocation: realGpsLocation,
+    isActive: session === "active",
+    onToast: showToast,
+    onLegComplete: handleLegComplete,
+    onRecalculate: async (lat, lng) => {
+      showToast("Recalculating route from new position...", "warning");
+      try {
+        const recalcDest = currentLeg === 'depot-to-patient' ? realGpsLocation : destination;
+        const routeData = await generateRoute({ lat, lng }, recalcDest);
+        setRoutePoints(routeData.path);
+        setDirectionsResult(routeData.result);
+      } catch (_) {
+        showToast("Failed to recalculate route", "warning");
+      }
+    }
+  });
+
+  // ─── Proximity Alert: same as ambulance page ───
+  const proximityAlert = useAmbulanceProximityAlert(
+    session === "active" && currentLeg === 'depot-to-patient' ? realGpsLocation : null,
+    { thresholdMeters: 1000, enableVoice: false, checkIntervalMs: 1000 }
   );
 
-  /* ── Draw corridor + geofence ── */
-  const drawCorridor = useCallback((path: google.maps.LatLng[]) => {
-    if (!mapObj.current) return;
+  useEffect(() => {
+    if (proximityAlert.isNearby && session === "active" && currentLeg === 'depot-to-patient') {
+      if (dummyCars.length === 0) {
+        const newDummyCars = generateDummyCars(realGpsLocation, 3);
+        setDummyCars(newDummyCars);
+        showToast("⚠️ Nearby traffic detected - slow down", "warning");
+        speak("Ambulance approaching nearby patient location. Nearby traffic detected, please reduce speed.");
+      }
+    } else if (!proximityAlert.isNearby && dummyCars.length > 0) {
+      setDummyCars([]);
+    }
+  }, [proximityAlert.isNearby, session, currentLeg, dummyCars.length, realGpsLocation, showToast, speak]);
 
-    corridorPoly.current?.setMap(null);
-    corridorPoly.current = new window.google.maps.Polyline({
-      path,
-      map: mapObj.current,
-      strokeColor: "#FFB347",
-      strokeOpacity: 0.85,
-      strokeWeight: 5,
-      icons: [{
-        icon: { path: "M 0,-1 0,1", strokeOpacity: 1, scale: 4 },
-        offset: "0",
-        repeat: "24px",
-      }],
-    });
+  // ─── Broadcast position every 1s (same as ambulance page) ───
+  useEffect(() => {
+    if (session !== "active" || !sim.ambulancePosition) return;
+    const interval = setInterval(() => {
+      if (!sim.ambulancePosition) return;
+      broadcastPosition({
+        lat: sim.ambulancePosition.lat,
+        lng: sim.ambulancePosition.lng,
+        bearing: sim.bearing,
+        speed: sim.speedKmh,
+        eta: sim.etaMinutes,
+        remainingM: sim.remainingDistanceM,
+        destination: { lat: destination.lat, lng: destination.lng, name: destinationName },
+        routePoints,
+        currentLeg,
+        progressPercent: sim.progressPercent,
+      });
+    }, 1000);
+    return () => clearInterval(interval);
+  }, [session, sim.ambulancePosition, sim.bearing, sim.speedKmh,
+      sim.etaMinutes, sim.remainingDistanceM, sim.progressPercent,
+      destination, destinationName, routePoints, currentLeg, broadcastPosition]);
 
-    geofenceCircle.current?.setMap(null);
-    geofenceCircle.current = new window.google.maps.Circle({
-      center: path[0],
-      radius: 200,
-      map: mapObj.current,
-      fillColor: "#FFB347",
-      fillOpacity: 0.07,
-      strokeColor: "#FFB347",
-      strokeOpacity: 0.35,
-      strokeWeight: 1.5,
-    });
-  }, []);
+  /* ── Hospital select handler (matches ambulance page) ── */
+  const handleHospitalSelect = (hospital: { lat: number; lng: number; name: string; address: string; id?: string } | Hospital) => {
+    const h = 'location' in hospital
+      ? { lat: hospital.location.lat, lng: hospital.location.lng, name: hospital.name, address: (hospital as Hospital).address || "", id: hospital.id }
+      : hospital;
+
+    const loc = { lat: h.lat, lng: h.lng };
+    setDestination(loc);
+    setDestinationName(h.name);
+    addLog(`Target changed: ${h.name}`, "info");
+
+    if (h.id) {
+      setSelectedHospitalId(h.id);
+    } else {
+      setSelectedHospitalId(null);
+    }
+
+    if (origin) {
+      fetchRoute(origin, loc);
+    }
+    showToast(`🏥 Destination changed to ${h.name}`, "success");
+  };
+
+  const handleChangeHospital = () => {
+    document.getElementById("hospital-cards-panel")?.scrollIntoView({ behavior: 'smooth' });
+  };
 
   /* ── Submit plate ── */
   const handlePlateSubmit = () => {
@@ -275,801 +475,583 @@ export default function PrivateEmergencyDashboard() {
     addLog(`Vehicle plate registered: ${plateNumber.toUpperCase()}`, "success");
   };
 
-  /* ── REQUEST (with simulated admin approval) ── */
-  const requestCorridor = useCallback(() => {
-    if (!mapObj.current) {
-      addLog("Map not ready yet", "error");
-      return;
+  /* ═══════════════════════════════════════════════════════
+     ACTIVATE — Same 2-leg flow as ambulance page
+     1. Generate route from ambulance depot → patient
+     2. On leg complete, auto-generate route patient → hospital
+  ═══════════════════════════════════════════════════════ */
+  const handleActivate = useCallback(async (ambulance?: NearbyAmbulance) => {
+    try {
+      addLog("Activating Green Corridor System...", "info");
+      showToast("Activating Green Corridor System...", "info");
+
+      // Determine ambulance starting position
+      const depot = ambulance && ambulance.lat && ambulance.lng
+        ? { lat: ambulance.lat, lng: ambulance.lng }
+        : calculateStartingPoint(realGpsLocation, "2.5 km");
+      setAmbulanceDepot(depot);
+
+      addLog(`🚑 Dispatching ambulance from ${ambulance?.distance || "nearby"}`, "info");
+      showToast("🚑 Dispatching ambulance to patient location...", "info");
+      setCurrentLeg('depot-to-patient');
+      setAmbulanceAtPatient(false);
+      setElapsed(0);
+
+      // Leg 1: depot → patient (same as ambulance page)
+      const leg1Route = await generateRoute(depot, realGpsLocation);
+      setRoutePoints(leg1Route.path);
+      setDirectionsResult(leg1Route.result);
+      setSession("active");
+
+      addLog(`Route: ${leg1Route.path.length} points from depot to patient`, "success");
+      addLog("🚑 PHASE 1: Ambulance En-Route to Patient", "success");
+
+      // Start elapsed timer
+      timerRef.current = setInterval(() => setElapsed(s => s + 1), 1000);
+
+      // Broadcast activation to operator dashboard
+      broadcastActivation({
+        lat: depot.lat,
+        lng: depot.lng,
+        destination: { lat: destination.lat, lng: destination.lng, name: destinationName },
+        routePoints: leg1Route.path,
+        currentLeg: 'depot-to-patient',
+      });
+
+      showToast("Emergency Activated! Ambulance en route to patient.", "success");
+    } catch (err) {
+      showToast(`Failed to generate route: ${err}`, "warning");
+      addLog(`Route generation failed: ${err}`, "error");
     }
+  }, [realGpsLocation, destination, destinationName, addLog, showToast, broadcastActivation]);
+
+  /* ── Assign ambulance (with admin approval simulation) ── */
+  const assignAmbulance = useCallback((amb: NearbyAmbulance) => {
     if (!plateSubmitted) {
       addLog("Enter and submit your plate number first", "error");
       return;
     }
-    setSession("pending");
-    addLog("Emergency corridor requested", "info");
-    addLog(`Vehicle: ${plateNumber.toUpperCase()} — Priority P-70`, "info");
-    addLog("Awaiting admin approval…", "warn");
 
-    /* simulate admin approval after 2.5s */
+    setSession("pending");
+    addLog(`🚑 Ambulance Selected: ${amb.id}`, "success");
+    addLog(`Distance: ${amb.distance} · ETA: ${amb.eta}`, "info");
+    addLog("Awaiting admin approval for dispatch…", "warn");
+
+    // Notify dispatch namespace
+    const dispatchSocket = io(`${SOCKET_URL}/dispatch`, { transports: ["websocket", "polling"] });
+    dispatchSocket.emit("private:emergency-request", {
+      ambulanceId: amb.id,
+      location: origin,
+      patientName: patientName || "Private User",
+      patientPhone, plateNumber, severity
+    });
+    dispatchSocket.emit("ambulance:dispatch", {
+      ambulanceId: amb.id,
+      location: origin,
+      patientName: patientName || "Private User",
+      patientPhone, plateNumber, severity
+    });
+
+    // Simulate admin approval after 2.5s
     setTimeout(() => {
       setAdminApproved(true);
-      addLog("✓ Admin approved — corridor granted", "success");
-      activateCorridor();
+      addLog(`✓ Admin approved — ${amb.id} dispatched`, "success");
+
+      if (!selectedHospitalId && hospitals[0]) {
+        setSelectedHospitalId(hospitals[0].id);
+        setDestination({ lat: hospitals[0].location.lat, lng: hospitals[0].location.lng });
+        setDestinationName(hospitals[0].name);
+        addLog(`Auto-selected hospital: ${hospitals[0].name}`, "success");
+      }
+
+      handleActivate(amb);
+      dispatchSocket.disconnect();
     }, 2500);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [plateNumber, plateSubmitted]);
+  }, [plateSubmitted, addLog, origin, patientName, patientPhone, plateNumber, severity, hospitals, selectedHospitalId, handleActivate]);
 
-  /* ── ACTIVATE CORRIDOR ── */
-  const activateCorridor = useCallback(() => {
-    setSession("active");
-    setElapsed(0);
-    setNearbyCount(0);
-    addLog("Emergency session started", "success");
-    addLog("JWT role verified: PRIVATE P-70", "info");
-    addLog("Requesting fastest route via Directions API…", "info");
-
-    // Create session on backend
-    const API_BASE = process.env.NEXT_PUBLIC_API_URL || "http://localhost:5000/api";
-    const SOCKET_URL = process.env.NEXT_PUBLIC_SOCKET_URL || "http://localhost:5000";
-    const token = typeof window !== "undefined" ? localStorage.getItem("gh_token") : null;
-
-    if (token) {
-      fetch(`${API_BASE}/emergency`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json", "Authorization": `Bearer ${token}` },
-        body: JSON.stringify({ origin: ORIGIN, destination: DESTINATION }),
-      })
-        .then(r => r.json())
-        .then(data => {
-          if (data.session?._id) {
-            setBackendSessionId(data.session._id);
-            addLog(`Backend session: ${data.session._id.slice(-8)}`, "success");
-            socketRef.current = io(`${SOCKET_URL}/tracking`, { transports: ["websocket", "polling"] });
-            socketRef.current.emit("join-session", data.session._id);
-          }
-        })
-        .catch(() => addLog("Backend unavailable — running in simulation mode", "warn"));
-    } else {
-      addLog("No auth token — running in simulation mode", "warn");
+  /* ── Request corridor (auto-find nearest ambulance) ── */
+  const requestCorridor = useCallback(() => {
+    if (!plateSubmitted) {
+      addLog("Enter and submit your plate number first", "error");
+      return;
     }
 
-    const startSimulationWithPath = (fullPath: google.maps.LatLng[], distText: string, durText: string) => {
-      routePath.current = fullPath;
-      routeIndex.current = 0;
+    const searchRadiusKm = 5.0;
+    const eligible = nearbyAmbulances
+      .filter(a => parseFloat(a.distance) <= searchRadiusKm && (a.status === "available" || a.status === "en-route"))
+      .sort((a, b) => parseFloat(a.distance) - parseFloat(b.distance));
 
-      setEtaText(durText);
-      setDistText(distText);
+    const nearest = eligible[0];
 
-      addLog(`Route: ${distText} · ${durText}`, "success");
-      addLog("Green corridor activating (P-70)…", "warn");
+    if (nearest) {
+      addLog(`✓ Ambulance ${nearest.id} found (${nearest.distance})`, "success");
+      speak(`Ambulance dispatched, estimated arrival ${nearest.eta}`);
+      assignAmbulance(nearest);
+    } else {
+      addLog("No ambulance found nearby. Routing directly to hospital...", "warn");
+      speak("No ambulance available. Routing to nearest hospital.");
 
-      drawCorridor(fullPath);
-      placeVehicle(ORIGIN, 0);
-
-      const bounds = new window.google.maps.LatLngBounds();
-      fullPath.forEach(p => bounds.extend(p));
-      mapObj.current!.fitBounds(bounds, { top: 60, right: 40, bottom: 80, left: 40 });
-
+      setSession("pending");
       setTimeout(() => {
-        addLog("Geo-fence active: 200m radius", "success");
-        addLog("Broadcasting alerts to nearby drivers", "info");
-        setNearbyCount(Math.floor(3 + Math.random() * 5));
-      }, 900);
+        setAdminApproved(true);
+        addLog("✓ Admin approved — Green corridor granted", "success");
+        // Direct to hospital mode — skip leg 1
+        setCurrentLeg('patient-to-hospital');
+        setSession("active");
 
-      timerRef.current = setInterval(() => setElapsed(s => s + 1), 1000);
-
-      moveRef.current = setInterval(() => {
-        routeIndex.current = Math.min(routeIndex.current + 2, fullPath.length - 1);
-        const pos = fullPath[routeIndex.current];
-        const next = fullPath[Math.min(routeIndex.current + 1, fullPath.length - 1)];
-
-        const heading = window.google.maps.geometry.spherical.computeHeading(pos, next);
-        placeVehicle(pos, heading);
-        geofenceCircle.current?.setCenter(pos);
-
-        setGps({ lat: pos.lat(), lng: pos.lng() });
-        setSpeed(Math.floor(38 + Math.random() * 32));
-        setNearbyCount(Math.floor(2 + Math.random() * 7));
-
-        if (routeIndex.current >= fullPath.length - 1) {
-          clearInterval(moveRef.current!);
-          addLog("Destination reached", "success");
-        }
-      }, 700);
-    };
-
-    const tryOsrmFallback = async () => {
-      try {
-        addLog("Attempting OSRM fallback...", "info");
-        const response = await fetch(`https://router.project-osrm.org/route/v1/driving/${ORIGIN.lng},${ORIGIN.lat};${DESTINATION.lng},${DESTINATION.lat}?overview=full&geometries=geojson`);
-        if (!response.ok) throw new Error("OSRM failed");
-        const data = await response.json();
-        if (data.code !== 'Ok' || !data.routes || data.routes.length === 0) throw new Error("OSRM no match");
-        
-        const fullPath = data.routes[0].geometry.coordinates.map((c: number[]) => new window.google.maps.LatLng(c[1], c[0]));
-        const leg = data.routes[0];
-        
-        startSimulationWithPath(
-          fullPath, 
-          `${(leg.distance / 1000).toFixed(1)} km`, 
-          `${Math.ceil(leg.duration / 60)} mins`
-        );
-      } catch (err) {
-        addLog("OSRM Route fallback failed too", "error");
-        setSession("idle");
-      }
-    };
-
-    const svc = new window.google.maps.DirectionsService();
-    svc.route(
-      {
-        origin: ORIGIN,
-        destination: DESTINATION,
-        travelMode: window.google.maps.TravelMode.DRIVING,
-      },
-      (result, status) => {
-        if (status !== "OK" || !result) {
-          addLog("Google Route failed: " + status, "error");
-          tryOsrmFallback();
-          return;
+        const selectedHosp = hospitals[0];
+        if (selectedHosp) {
+          setSelectedHospitalId(selectedHosp.id);
+          setDestination({ lat: selectedHosp.location.lat, lng: selectedHosp.location.lng });
+          setDestinationName(selectedHosp.name);
         }
 
-        const leg = result.routes[0].legs[0];
-
-        const fullPath: google.maps.LatLng[] = [];
-        result.routes[0].legs[0].steps.forEach(step => {
-          if (step.polyline) {
-            window.google.maps.geometry.encoding
-              .decodePath(step.polyline.points)
-              .forEach(p => fullPath.push(p));
+        (async () => {
+          try {
+            const routeData = await generateRoute(realGpsLocation, destination);
+            setRoutePoints(routeData.path);
+            setDirectionsResult(routeData.result);
+            timerRef.current = setInterval(() => setElapsed(s => s + 1), 1000);
+            broadcastActivation({
+              lat: realGpsLocation.lat, lng: realGpsLocation.lng,
+              destination: { lat: destination.lat, lng: destination.lng, name: destinationName },
+              routePoints: routeData.path,
+              currentLeg: 'patient-to-hospital',
+            });
+          } catch (err) {
+            showToast(`Failed to generate route: ${err}`, "warning");
           }
-        });
-
-        startSimulationWithPath(
-          fullPath, 
-          leg.distance?.text ?? "--", 
-          leg.duration_in_traffic?.text ?? leg.duration?.text ?? "--"
-        );
-      }
-    );
-  }, [addLog, drawCorridor, placeVehicle]);
+        })();
+      }, 2500);
+    }
+  }, [plateSubmitted, nearbyAmbulances, hospitals, origin, destination, destinationName, addLog, speak, assignAmbulance, showToast, broadcastActivation]);
 
   /* ── TERMINATE ── */
   const terminate = useCallback(() => {
     setShowConfirm(false);
     setSession("terminating");
     addLog("Terminating session…", "warn");
-    [timerRef, moveRef].forEach(r => { if (r.current) clearInterval(r.current); });
+    if (timerRef.current) clearInterval(timerRef.current);
+    sim.resetSimulation();
 
-    // Resolve on backend
     if (backendSessionId) {
       const API_BASE = process.env.NEXT_PUBLIC_API_URL || "http://localhost:5000/api";
       const token = typeof window !== "undefined" ? localStorage.getItem("gh_token") : null;
       if (token) {
         fetch(`${API_BASE}/emergency/${backendSessionId}/resolve`, {
-          method: "PATCH",
-          headers: { "Authorization": `Bearer ${token}` },
-        }).catch(() => { });
+          method: "PATCH", headers: { "Authorization": `Bearer ${token}` },
+        }).catch(() => {});
       }
       socketRef.current?.disconnect();
       socketRef.current = null;
     }
 
+    broadcastDeactivation();
+
     setTimeout(() => {
-      corridorPoly.current?.setMap(null);
-      geofenceCircle.current?.setMap(null);
-      vehicleMarker.current?.setMap(null);
-      vehicleMarker.current = null;
-      corridorPoly.current = null;
-      geofenceCircle.current = null;
-      routePath.current = [];
-      routeIndex.current = 0;
-
-      mapObj.current?.panTo(ORIGIN);
-      mapObj.current?.setZoom(14);
-
+      setRoutePoints([]);
+      setDirectionsResult(null);
+      setCurrentLeg('idle');
+      setAmbulanceAtPatient(false);
+      setAmbulanceDepot(null);
+      setDummyCars([]);
       setSession("idle");
-      setSpeed(0);
-      setEtaText("--");
-      setDistText("--");
-      setNearbyCount(0);
-      setGps(ORIGIN);
       setAdminApproved(false);
       setBackendSessionId(null);
+      setElapsed(0);
       addLog("Corridor closed — geo-fence lifted", "success");
-      addLog("All driver alerts cleared", "success");
       addLog("Session terminated", "info");
     }, 1200);
-  }, [addLog, backendSessionId]);
+  }, [addLog, backendSessionId, sim, broadcastDeactivation]);
 
   /* cleanup on unmount */
   useEffect(() => () => {
-    [timerRef, moveRef].forEach(r => { if (r.current) clearInterval(r.current); });
+    if (timerRef.current) clearInterval(timerRef.current);
     socketRef.current?.disconnect();
   }, []);
 
+  /* ── TOAST CONTAINER ── */
+  const ToastUI = () => (
+    <div className="fixed bottom-6 right-6 z-[300] flex flex-col gap-3 pointer-events-none">
+      {toasts.map(t => (
+        <div key={t.id} className={`px-5 py-3 rounded-xl border backdrop-blur-md shadow-2xl flex items-center gap-3 animate-in slide-in-from-right-10 duration-300 pointer-events-auto ${
+          t.type === 'success' ? 'bg-emerald-500/20 border-emerald-500/40 text-emerald-100' :
+          t.type === 'error' ? 'bg-red-500/20 border-red-500/40 text-red-100' :
+          'bg-blue-500/20 border-blue-500/40 text-blue-100'
+        }`}>
+          <div className="flex-1 text-sm font-semibold tracking-tight">{t.message}</div>
+          <button onClick={() => dismissToast(t.id)} className="opacity-50 hover:opacity-100">✕</button>
+        </div>
+      ))}
+    </div>
+  );
+
   /* ── derived ── */
   const elapsedStr = `${String(Math.floor(elapsed / 60)).padStart(2, "0")}:${String(elapsed % 60).padStart(2, "0")}`;
-  const noKey = !MAPS_API_KEY;
-  const availableAmbulances = nearbyAmbulances.filter(a => a.status === "available");
-  const ambulancesNearby = nearbyAmbulances.length > 0;
+  const availableAmbulances = nearbyAmbulances.filter(a => a.status === "available" && parseFloat(a.distance) <= 5.0);
+  const isEmergencyActive = session === "active";
 
   /* ──────────────────────────────────────────────────────
      RENDER
   ────────────────────────────────────────────────────── */
   return (
-    <>
-      <style>{`
-        @import url('https://fonts.googleapis.com/css2?family=Bebas+Neue&family=DM+Sans:wght@300;400;500;700&family=JetBrains+Mono:wght@400;600&display=swap');
+    <div className="min-h-screen bg-[#020617] text-white flex flex-col overflow-hidden relative">
+      <ToastUI />
+      {/* Ambient background effects */}
+      <div className="fixed inset-0 pointer-events-none z-0">
+        <div className="absolute top-0 left-1/4 w-[600px] h-[600px] bg-blue-600/[0.03] rounded-full blur-[120px] animate-float" style={{ animationDuration: '8s' }} />
+        <div className="absolute bottom-0 right-1/4 w-[500px] h-[500px] bg-purple-600/[0.03] rounded-full blur-[120px] animate-float" style={{ animationDelay: '3s', animationDuration: '10s' }} />
+        <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[800px] h-[800px] bg-red-600/[0.02] rounded-full blur-[150px]" />
+      </div>
 
-        *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+      {/* Top Header & Actions */}
+      <header className="border-b border-white/[0.04] bg-[#020617]/90 backdrop-blur-2xl px-6 py-3.5 z-50 shadow-2xl relative overflow-hidden">
+        <div className="absolute top-0 left-0 right-0 h-[2px] bg-gradient-to-r from-transparent via-blue-500/60 to-transparent" />
+        <div className="absolute -bottom-6 left-1/2 -translate-x-1/2 w-[600px] h-[40px] bg-blue-500/[0.03] rounded-full blur-2xl pointer-events-none" />
 
-        :root {
-          --midnight: #FFFBF5;
-          --navy:     #FFFFFF;
-          --navy2:    #F1F5F9;
-          --orange:   #E8571A;
-          --amber:    #F59E0B;
-          --white:    #1E293B;
-          --muted:    #64748B;
-          --success:  #059669;
-          --danger:   #DC2626;
-          --blue:     #3B82F6;
-          --border:   #E2E8F0;
-        }
-
-        html, body { height: 100%; overflow: hidden; }
-        body { background: var(--midnight); color: var(--white); font-family: 'DM Sans', sans-serif; }
-
-        /* ── TOP BAR ── */
-        .topbar {
-          position: fixed; top: 0; left: 0; right: 0;
-          height: 52px; z-index: 60;
-          display: flex; align-items: center; justify-content: space-between;
-          padding: 0 1.5rem;
-          background: rgba(255,255,255,0.95);
-          border-bottom: 1px solid rgba(226,232,240,1);
-          backdrop-filter: blur(20px);
-          box-shadow: 0 1px 8px rgba(0,0,0,0.05);
-        }
-        .tb-left, .tb-right { display: flex; align-items: center; gap: 0.85rem; }
-
-        .logo-link { font-family:'Bebas Neue',cursive; font-size:1.3rem; letter-spacing:0.08em; color:var(--white); text-decoration:none; }
-        .logo-link em { color:#FFB347; font-style:normal; }
-
-        .tb-badge {
-          font-family:'JetBrains Mono',monospace; font-size:0.6rem; letter-spacing:0.1em;
-          padding:0.22rem 0.6rem; border-radius:4px;
-          background:rgba(255,179,71,0.12); border:1px solid rgba(255,179,71,0.28); color:#FFB347;
-        }
-        .tb-timer { font-family:'JetBrains Mono',monospace; font-size:0.72rem; color:var(--muted); }
-        .tb-timer.live { color:var(--success); }
-
-        .sp {
-          display:flex; align-items:center; gap:0.4rem;
-          font-family:'JetBrains Mono',monospace; font-size:0.62rem; letter-spacing:0.07em;
-          padding:0.22rem 0.65rem; border-radius:100px;
-        }
-        .sp.idle { background:rgba(138,155,181,0.08); border:1px solid rgba(138,155,181,0.18); color:var(--muted); }
-        .sp.pending { background:rgba(255,179,71,0.08); border:1px solid rgba(255,179,71,0.28); color:var(--amber); }
-        .sp.active { background:rgba(52,211,153,0.08); border:1px solid rgba(52,211,153,0.28); color:var(--success); }
-        .sp.terminating { background:rgba(255,68,68,0.08); border:1px solid rgba(255,68,68,0.28); color:var(--danger); }
-        .sp-dot { width:6px; height:6px; border-radius:50%; flex-shrink:0; }
-        .sp-dot.live { background:var(--success); animation:blink 1.2s infinite; }
-        .sp-dot.idle { background:var(--muted); }
-        .sp-dot.pend { background:var(--amber); animation:blink 0.8s infinite; }
-        .sp-dot.term { background:var(--danger); animation:blink 0.6s infinite; }
-        @keyframes blink { 0%,100%{opacity:1} 50%{opacity:0.2} }
-
-        .exit-btn { font-family:'JetBrains Mono',monospace; font-size:0.62rem; color:var(--muted); text-decoration:none; letter-spacing:0.04em; transition:color 0.2s; }
-        .exit-btn:hover { color:#FFB347; }
-
-        /* ── PAGE GRID ── */
-        .page {
-          padding-top: 52px;
-          height: 100vh;
-          display: grid;
-          grid-template-columns: 1fr 360px;
-          overflow: hidden;
-        }
-
-        /* ── LEFT COL ── */
-        .left-col {
-          display: grid;
-          grid-template-rows: 1fr auto;
-          overflow: hidden;
-        }
-
-        /* Map */
-        .map-wrap { position: relative; overflow: hidden; }
-        .map-el   { width: 100%; height: 100%; }
-
-        /* Map overlays */
-        .ov { position:absolute; pointer-events:none; z-index:10; }
-        .ov-tl { top:1rem; left:1rem; }
-        .ov-tr { top:1rem; right:1rem; }
-        .ov-badge {
-          font-family:'JetBrains Mono',monospace; font-size:0.63rem; letter-spacing:0.06em;
-          padding:0.32rem 0.75rem; border-radius:6px;
-          background:rgba(5,12,26,0.9); backdrop-filter:blur(12px);
-          border:1px solid rgba(255,179,71,0.2); color:var(--amber); white-space:nowrap;
-        }
-        .ov-badge.blue { border-color:rgba(96,165,250,0.25); color:var(--blue); }
-
-        /* No-key placeholder */
-        .no-key {
-          display:flex; flex-direction:column; align-items:center; justify-content:center;
-          height:100%; gap:1rem; font-family:'JetBrains Mono',monospace; text-align:center; padding:2rem;
-        }
-        .no-key-title { font-family:'Bebas Neue',cursive; font-size:2rem; color:var(--danger); }
-        .no-key-sub   { font-size:0.78rem; color:var(--muted); max-width:340px; line-height:1.8; }
-        .no-key-code  {
-          font-size:0.75rem; color:var(--amber);
-          background:rgba(255,179,71,0.08); border:1px solid rgba(255,179,71,0.2);
-          border-radius:6px; padding:0.7rem 1.2rem; letter-spacing:0.03em;
-        }
-
-        /* ── STAT CARDS ROW ── */
-        .cards-row {
-          display: grid;
-          grid-template-columns: repeat(4, 1fr);
-          gap: 1px;
-          background: var(--border);
-          border-top: 1px solid var(--border);
-        }
-        .sc {
-          background: #fff; padding: 1rem 1.25rem;
-          display: flex; flex-direction: column; gap: 0.25rem;
-          transition: background 0.2s;
-        }
-        .sc:hover { background: #FFF7ED; }
-        .sc-label { font-family:'JetBrains Mono',monospace; font-size:0.57rem; color:var(--muted); text-transform:uppercase; letter-spacing:0.1em; }
-        .sc-val   { font-family:'Bebas Neue',cursive; font-size:2rem; letter-spacing:0.04em; line-height:1; }
-        .sc-unit  { font-family:'JetBrains Mono',monospace; font-size:0.58rem; color:var(--muted); }
-
-        /* ── SIDEBAR ── */
-        .sidebar {
-          border-left: 1px solid var(--border);
-          background: var(--navy);
-          display: flex; flex-direction: column; overflow: hidden;
-          box-shadow: -2px 0 8px rgba(0,0,0,0.04);
-        }
-
-        /* Action button */
-        .act-wrap { padding: 1rem; flex-shrink: 0; }
-        .act-btn {
-          width:100%; padding:1rem 1.25rem; border-radius:10px;
-          font-family:'DM Sans',sans-serif; font-size:1rem; font-weight:700;
-          border:none; cursor:pointer; transition:all 0.22s;
-          display:flex; align-items:center; justify-content:center; gap:0.6rem;
-        }
-        .act-activate {
-          background:#FFB347; color:#050C1A;
-          box-shadow:0 4px 28px rgba(255,179,71,0.4);
-          animation:btnGlow 2s ease-in-out infinite;
-        }
-        @keyframes btnGlow { 0%,100%{box-shadow:0 4px 28px rgba(255,179,71,0.38)} 50%{box-shadow:0 4px 44px rgba(255,179,71,0.7)} }
-        .act-activate:hover { background:#FF6B1A; transform:translateY(-1px); }
-        .act-activate:disabled { opacity:0.45; cursor:not-allowed; animation:none; transform:none; }
-        .act-terminate { background:rgba(255,68,68,0.1); color:var(--danger); border:1px solid rgba(255,68,68,0.3); }
-        .act-terminate:hover { background:rgba(255,68,68,0.18); transform:translateY(-1px); }
-        .act-disabled { background:rgba(138,155,181,0.06); color:var(--muted); border:1px solid rgba(138,155,181,0.12); cursor:not-allowed; }
-        .act-pending { background:rgba(255,179,71,0.08); color:var(--amber); border:1px solid rgba(255,179,71,0.25); cursor:wait; }
-
-        /* Plate input */
-        .plate-sec { padding:0.85rem 1rem; border-top:1px solid rgba(255,255,255,0.05); flex-shrink:0; }
-        .plate-label { font-family:'JetBrains Mono',monospace; font-size:0.57rem; color:var(--muted); text-transform:uppercase; letter-spacing:0.1em; margin-bottom:0.55rem; display:block; }
-        .plate-row { display:flex; gap:0.5rem; }
-        .plate-input {
-          flex:1; padding:0.7rem 0.85rem; border-radius:7px;
-          background:var(--navy2); border:1px solid rgba(255,255,255,0.09);
-          color:var(--white); font-family:'JetBrains Mono',monospace; font-size:0.82rem;
-          letter-spacing:0.08em; text-transform:uppercase; outline:none;
-          transition:border-color 0.2s, box-shadow 0.2s;
-        }
-        .plate-input::placeholder { color:rgba(138,155,181,0.4); text-transform:none; }
-        .plate-input:focus { border-color:#FFB347; box-shadow:0 0 0 3px rgba(255,179,71,0.12); }
-        .plate-input:disabled { opacity:0.5; cursor:not-allowed; }
-        .plate-btn {
-          padding:0.7rem 1rem; border-radius:7px; border:none; cursor:pointer;
-          font-family:'JetBrains Mono',monospace; font-size:0.68rem; font-weight:600;
-          letter-spacing:0.06em; transition:all 0.2s;
-        }
-        .plate-btn-submit { background:#FFB347; color:#050C1A; }
-        .plate-btn-submit:hover { background:#FF6B1A; }
-        .plate-btn-submit:disabled { opacity:0.4; cursor:not-allowed; }
-        .plate-btn-done { background:rgba(52,211,153,0.12); color:var(--success); border:1px solid rgba(52,211,153,0.25); cursor:default; }
-
-        /* Ambulance availability card */
-        .amb-card-sec { padding:0.85rem 1rem; border-top:1px solid rgba(255,255,255,0.05); flex-shrink:0; }
-        .amb-avail-card {
-          border-radius:9px; padding:0.85rem;
-          border:1px solid rgba(255,255,255,0.05);
-          background:var(--navy2);
-        }
-        .amb-header {
-          display:flex; align-items:center; justify-content:space-between;
-          margin-bottom:0.6rem;
-        }
-        .amb-header-left { display:flex; align-items:center; gap:0.45rem; }
-        .amb-status-dot {
-          width:8px; height:8px; border-radius:50%; flex-shrink:0;
-        }
-        .amb-status-dot.available { background:#34D399; box-shadow:0 0 6px #34D399; animation:blink 1.5s infinite; }
-        .amb-status-dot.none { background:var(--danger); box-shadow:0 0 6px var(--danger); }
-        .amb-status-text { font-family:'JetBrains Mono',monospace; font-size:0.64rem; letter-spacing:0.05em; font-weight:600; }
-        .amb-count { font-family:'JetBrains Mono',monospace; font-size:0.58rem; color:var(--muted); }
-
-        .amb-list { display:flex; flex-direction:column; gap:0.4rem; }
-        .amb-item {
-          display:flex; align-items:center; justify-content:space-between;
-          padding:0.5rem 0.65rem; border-radius:6px;
-          background:rgba(255,255,255,0.02);
-          border:1px solid rgba(255,255,255,0.04);
-          transition:background 0.2s;
-        }
-        .amb-item:hover { background:rgba(255,255,255,0.04); }
-        .amb-item-left { display:flex; align-items:center; gap:0.5rem; }
-        .amb-item-icon { font-size:0.9rem; }
-        .amb-item-id { font-family:'JetBrains Mono',monospace; font-size:0.65rem; font-weight:600; color:var(--white); }
-        .amb-item-dist { font-family:'JetBrains Mono',monospace; font-size:0.58rem; color:var(--muted); }
-        .amb-item-right { text-align:right; }
-        .amb-item-eta { font-family:'JetBrains Mono',monospace; font-size:0.62rem; color:var(--amber); font-weight:600; }
-        .amb-item-status {
-          font-family:'JetBrains Mono',monospace; font-size:0.52rem; letter-spacing:0.05em;
-          padding:0.12rem 0.4rem; border-radius:3px; display:inline-block; margin-top:0.15rem;
-        }
-        .amb-item-status.en-route { background:rgba(255,107,26,0.12); color:#FF6B1A; }
-        .amb-item-status.available { background:rgba(52,211,153,0.12); color:#34D399; }
-        .amb-item-status.busy { background:rgba(255,68,68,0.12); color:#FF4444; }
-
-        .amb-empty { font-family:'JetBrains Mono',monospace; font-size:0.6rem; color:rgba(255,68,68,0.7); text-align:center; padding:0.8rem 0; }
-
-        /* Sidebar sections */
-        .sb-sec { padding:0.85rem 1rem; border-top:1px solid rgba(255,255,255,0.05); flex-shrink:0; }
-        .sb-title { font-family:'JetBrains Mono',monospace; font-size:0.57rem; color:var(--muted); text-transform:uppercase; letter-spacing:0.1em; margin-bottom:0.65rem; }
-
-        /* ETA */
-        .eta-card {
-          background:var(--navy2); border-radius:9px; padding:0.85rem;
-          border:1px solid rgba(255,255,255,0.05);
-          display:flex; align-items:center; justify-content:space-between;
-        }
-        .eta-val  { font-family:'Bebas Neue',cursive; font-size:2.2rem; color:var(--amber); line-height:1; }
-        .eta-unit { font-family:'JetBrains Mono',monospace; font-size:0.57rem; color:var(--muted); margin-top:0.1rem; display:block; }
-        .eta-dest strong { font-family:'DM Sans',sans-serif; font-size:0.8rem; color:var(--white); display:block; text-align:right; }
-        .eta-dest span   { font-family:'JetBrains Mono',monospace; font-size:0.58rem; color:var(--muted); }
-
-        /* Mini grid */
-        .mini-grid { display:grid; grid-template-columns:1fr 1fr; gap:0.5rem; }
-        .mc { background:var(--navy2); border-radius:8px; padding:0.7rem; border:1px solid rgba(255,255,255,0.05); }
-        .mc-val   { font-family:'JetBrains Mono',monospace; font-size:0.76rem; font-weight:600; margin-bottom:0.2rem; }
-        .mc-label { font-family:'JetBrains Mono',monospace; font-size:0.54rem; color:var(--muted); letter-spacing:0.06em; }
-
-        /* Priority */
-        .prio-card {
-          background:var(--navy2); border-radius:8px; padding:0.75rem;
-          border:1px solid rgba(255,179,71,0.15);
-          display:flex; align-items:center; gap:0.75rem;
-        }
-        .prio-num { font-family:'Bebas Neue',cursive; font-size:2rem; color:#FFB347; line-height:1; flex-shrink:0; }
-        .prio-right { flex:1; }
-        .prio-bar-bg   { height:3px; background:rgba(255,255,255,0.06); border-radius:2px; margin-bottom:0.35rem; }
-        .prio-bar-fill { height:3px; background:#FFB347; border-radius:2px; }
-        .prio-label { font-family:'JetBrains Mono',monospace; font-size:0.58rem; color:#FFB347; letter-spacing:0.06em; }
-
-        /* Log */
-        .log-wrap { flex:1; overflow:hidden; display:flex; flex-direction:column; border-top:1px solid rgba(255,255,255,0.05); padding:0.85rem 1rem 0; }
-        .log-scroll {
-          flex:1; overflow-y:auto; display:flex; flex-direction:column; gap:0.28rem;
-          padding-bottom:0.75rem;
-          scrollbar-width:thin; scrollbar-color:rgba(255,179,71,0.15) transparent;
-        }
-        .log-row {
-          display:flex; gap:0.45rem; align-items:flex-start;
-          font-family:'JetBrains Mono',monospace; font-size:0.59rem; line-height:1.55;
-          padding:0.28rem 0.4rem; border-radius:4px;
-          background:rgba(255,255,255,0.018);
-        }
-        .log-t { color:rgba(138,155,181,0.4); flex-shrink:0; }
-        .log-m.info    { color:var(--muted); }
-        .log-m.success { color:var(--success); }
-        .log-m.warn    { color:var(--amber); }
-        .log-m.error   { color:var(--danger); }
-        .log-empty { font-family:'JetBrains Mono',monospace; font-size:0.59rem; color:rgba(138,155,181,0.25); padding:0.4rem; }
-
-        /* Modal */
-        .modal-bg { position:fixed; inset:0; background:rgba(5,12,26,0.82); backdrop-filter:blur(10px); z-index:200; display:flex; align-items:center; justify-content:center; }
-        .modal { background:var(--navy); border:1px solid rgba(255,68,68,0.28); border-radius:14px; padding:2rem; max-width:380px; width:90%; }
-        .modal-title { font-family:'Bebas Neue',cursive; font-size:2rem; color:var(--danger); margin-bottom:0.5rem; }
-        .modal-body  { color:var(--muted); font-size:0.875rem; line-height:1.65; margin-bottom:1.5rem; }
-        .modal-btns  { display:flex; gap:0.75rem; }
-        .modal-btn { flex:1; padding:0.8rem; border-radius:8px; font-weight:700; font-family:'DM Sans',sans-serif; font-size:0.9rem; cursor:pointer; border:none; transition:all 0.2s; }
-        .mb-cancel  { background:rgba(255,255,255,0.05); color:var(--muted); border:1px solid rgba(255,255,255,0.1); }
-        .mb-cancel:hover { color:var(--white); }
-        .mb-confirm { background:var(--danger); color:var(--white); box-shadow:0 4px 20px rgba(255,68,68,0.3); }
-        .mb-confirm:hover { transform:translateY(-1px); }
-
-        /* Spinner */
-        .spinner { width:16px; height:16px; border-radius:50%; border:2.5px solid currentColor; border-top-color:transparent; animation:spin 0.7s linear infinite; }
-        @keyframes spin { to { transform:rotate(360deg); } }
-
-        @media (max-width: 900px) {
-          .page { grid-template-columns: 1fr; }
-          .sidebar { border-left:none; border-top:1px solid rgba(255,179,71,0.1); }
-          .cards-row { grid-template-columns: repeat(2,1fr); }
-        }
-      `}</style>
-
-      {/* ── CONFIRM MODAL ── */}
-      {showConfirm && (
-        <div className="modal-bg">
-          <div className="modal">
-            <div className="modal-title">Terminate Session?</div>
-            <p className="modal-body">
-              This will close the virtual corridor, lift the 200m geo-fence,
-              and clear all driver alerts. Only terminate upon arrival.
-            </p>
-            <div className="modal-btns">
-              <button className="modal-btn mb-cancel" onClick={() => setShowConfirm(false)}>Cancel</button>
-              <button className="modal-btn mb-confirm" onClick={terminate}>Yes, Terminate</button>
+        <div className="flex items-center justify-between gap-4 relative z-10">
+          {/* Left: Title + Status */}
+          <div className="flex items-center gap-3 min-w-0">
+            <div className={`w-9 h-9 rounded-xl bg-blue-500/10 border border-blue-500/20 flex items-center justify-center transition-all duration-500 ${
+              isEmergencyActive ? "shadow-[0_0_20px_rgba(59,130,246,0.4)] animate-pulse-glow" : "shadow-[0_0_12px_rgba(59,130,246,0.15)]"
+            }`}>
+              <span className="text-lg">🚗</span>
             </div>
-          </div>
-        </div>
-      )}
-
-      {/* ── TOP BAR ── */}
-      <header className="topbar">
-        <div className="tb-left">
-          <Link href="/" className="logo-link">Golden<em>Hour</em></Link>
-          <span className="tb-badge">🚗 PRIVATE EMERGENCY</span>
-          {plateSubmitted && (
-            <span className="tb-badge" style={{ background: "rgba(52,211,153,0.1)", borderColor: "rgba(52,211,153,0.3)", color: "#34D399" }}>
-              {plateNumber.toUpperCase()}
-            </span>
-          )}
-          <span className={`tb-timer ${session === "active" ? "live" : ""}`}>
-            {session === "active" ? `⏱ ${elapsedStr}` : "⏱ 00:00"}
-          </span>
-        </div>
-        <div className="tb-right">
-          <div className={`sp ${session}`}>
-            <div className={`sp-dot ${session === "active" ? "live" : session === "pending" ? "pend" : session === "terminating" ? "term" : "idle"}`} />
-            {session === "idle" ? "STANDBY" : session === "pending" ? "AWAITING APPROVAL" : session === "active" ? "CORRIDOR ACTIVE" : "TERMINATING…"}
-          </div>
-          <Link href="/auth" className="exit-btn">← Exit</Link>
-        </div>
-      </header>
-
-      {/* ── PAGE ── */}
-      <div className="page">
-
-        {/* ── LEFT COLUMN ── */}
-        <div className="left-col">
-
-          {/* Map */}
-          <div className="map-wrap">
-            {noKey ? (
-              <div className="no-key">
-                <div className="no-key-title">API Key Missing</div>
-                <p className="no-key-sub">
-                  Open <strong style={{ color: "var(--white)" }}>app/private-emergency/page.tsx</strong> and
-                  replace <code style={{ color: "var(--amber)" }}>YOUR_GOOGLE_MAPS_API_KEY</code> with
-                  your actual Google Maps API key.
-                </p>
-                <div className="no-key-code">{"const MAPS_API_KEY = \"AIza…your_key\";"}</div>
-              </div>
-            ) : (
-              <div ref={mapRef} className="map-el" />
-            )}
-
-            {/* Overlays */}
-            {!noKey && (
-              <>
-                <div className="ov ov-tl">
-                  <div className="ov-badge">
-                    {session === "active"
-                      ? `🟡 CORRIDOR ACTIVE (P-70) — ${nearbyCount} DRIVERS ALERTED`
-                      : session === "pending"
-                        ? "🟡 PENDING ADMIN APPROVAL…"
-                        : "⬜ STANDBY — AWAITING ACTIVATION"}
-                  </div>
-                </div>
-                <div className="ov ov-tr">
-                  <div className="ov-badge blue">
-                    {gps.lat.toFixed(5)}°N · {gps.lng.toFixed(5)}°E
-                  </div>
-                </div>
-              </>
-            )}
-          </div>
-
-          {/* ── STAT CARDS ── */}
-          <div className="cards-row">
-            <div className="sc">
-              <div className="sc-label">Speed</div>
-              <div className="sc-val" style={{ color: "var(--amber)" }}>
-                {speed > 0 ? speed : "—"}
-              </div>
-              <div className="sc-unit">KM / H</div>
-            </div>
-            <div className="sc">
-              <div className="sc-label">Distance</div>
-              <div className="sc-val" style={{ color: "var(--blue)" }}>
-                {distText !== "--" ? distText : "—"}
-              </div>
-              <div className="sc-unit">TO DESTINATION</div>
-            </div>
-            <div className="sc">
-              <div className="sc-label">Nearby Drivers</div>
-              <div className="sc-val" style={{ color: "var(--blue)" }}>
-                {nearbyCount > 0 ? nearbyCount : "—"}
-              </div>
-              <div className="sc-unit">IN CORRIDOR · 1 KM</div>
-            </div>
-            <div className="sc">
-              <div className="sc-label">Geo-fence</div>
-              <div className="sc-val" style={{ color: session === "active" ? "var(--success)" : "var(--muted)" }}>
-                {session === "active" ? "200" : "—"}
-              </div>
-              <div className="sc-unit">METRES RADIUS</div>
-            </div>
-          </div>
-        </div>
-
-        {/* ── SIDEBAR ── */}
-        <aside className="sidebar">
-
-          {/* Plate Number Input */}
-          <div className="plate-sec">
-            <span className="plate-label">Vehicle Plate Number *</span>
-            <div className="plate-row">
-              <input
-                className="plate-input"
-                type="text"
-                placeholder="MH-12-AB-1234"
-                value={plateNumber}
-                onChange={(e) => setPlateNumber(e.target.value)}
-                disabled={plateSubmitted}
-                maxLength={15}
-              />
-              {plateSubmitted ? (
-                <button className="plate-btn plate-btn-done">✓</button>
-              ) : (
-                <button
-                  className="plate-btn plate-btn-submit"
-                  onClick={handlePlateSubmit}
-                  disabled={!plateNumber.trim()}
-                >
-                  SET
-                </button>
-              )}
-            </div>
-          </div>
-
-          {/* Nearby Ambulances Availability */}
-          <div className="amb-card-sec">
-            <div className="sb-title">Nearby Ambulances</div>
-            <div className="amb-avail-card">
-              <div className="amb-header">
-                <div className="amb-header-left">
-                  <div className={`amb-status-dot ${ambulancesNearby ? "available" : "none"}`} />
-                  <span className="amb-status-text" style={{ color: availableAmbulances.length > 0 ? "#34D399" : nearbyAmbulances.length > 0 ? "#FFB347" : "#FF4444" }}>
-                    {availableAmbulances.length > 0
-                      ? "AVAILABLE NEARBY"
-                      : nearbyAmbulances.length > 0
-                        ? "NEARBY (BUSY)"
-                        : "NONE DETECTED"}
+            <div className="flex flex-col">
+              <h1 className="text-sm font-bold tracking-[0.2em] text-white uppercase whitespace-nowrap leading-tight">
+                GoldenHour
+                <span className="text-gray-600 font-light ml-2 text-xs">PRIVATE EMERGENCY</span>
+              </h1>
+              <div className="flex items-center gap-2 mt-0.5">
+                <div className="flex items-center gap-1">
+                  <div className={`w-1.5 h-1.5 rounded-full transition-colors duration-500 ${location ? 'bg-emerald-400 shadow-[0_0_6px_rgba(52,211,153,0.8)]' : 'bg-amber-400 animate-pulse'}`} />
+                  <span className="text-[9px] font-mono text-gray-500 tracking-wider uppercase">
+                    {location ? 'GPS LIVE' : 'GPS ACQUIRING'}
                   </span>
                 </div>
-                <span className="amb-count">{nearbyAmbulances.length} found</span>
-              </div>
-              <div className="amb-list">
-                {nearbyAmbulances.length === 0 ? (
-                  <div className="amb-empty">No ambulances detected in your area</div>
-                ) : (
-                  nearbyAmbulances.map((a) => (
-                    <div key={a.id} className="amb-item">
-                      <div className="amb-item-left">
-                        <span className="amb-item-icon">🚑</span>
-                        <div>
-                          <div className="amb-item-id">{a.id}</div>
-                          <div className="amb-item-dist">{a.distance}</div>
-                        </div>
-                      </div>
-                      <div className="amb-item-right">
-                        <div className="amb-item-eta">ETA {a.eta}</div>
-                        <span className={`amb-item-status ${a.status}`}>
-                          {a.status === "en-route" ? "EN ROUTE" : a.status === "available" ? "AVAILABLE" : "BUSY"}
-                        </span>
-                      </div>
-                    </div>
-                  ))
+                {isEmergencyActive && (
+                  <div className="flex items-center gap-1 ml-1">
+                    <div className="w-1.5 h-1.5 rounded-full bg-blue-500 animate-pulse shadow-[0_0_6px_rgba(59,130,246,0.8)]" />
+                    <span className="text-[9px] font-mono text-blue-400 tracking-wider uppercase font-bold">CORRIDOR ACTIVE</span>
+                  </div>
+                )}
+                {plateSubmitted && (
+                  <span className="text-[9px] text-emerald-500 font-mono tracking-widest px-1.5 py-0.5 bg-emerald-500/10 rounded ml-1 border border-emerald-500/20">
+                    {plateNumber.toUpperCase()}
+                  </span>
                 )}
               </div>
             </div>
           </div>
 
-          {/* Action button */}
-          <div className="act-wrap">
+          {/* Center: Hospital Search (same as ambulance page) */}
+          <div className="flex-1 max-w-md">
+            <HospitalSearch
+              onHospitalSelect={handleHospitalSelect}
+              isLoaded={isLoaded}
+              currentLocation={realGpsLocation}
+            />
+          </div>
+
+          {/* Right: Activation Button */}
+          <div className="flex-shrink-0 flex items-center gap-4">
             {session === "idle" && (
               <button
-                className="act-btn act-activate"
                 onClick={requestCorridor}
-                disabled={!plateSubmitted}
+                disabled={!plateSubmitted || !isLoaded || searchingHospitals}
+                className="px-6 py-2.5 bg-gradient-to-r from-blue-600 to-blue-500 hover:from-blue-500 hover:to-blue-400 disabled:opacity-50 disabled:cursor-not-allowed text-white font-bold tracking-[0.15em] text-[11px] uppercase rounded-xl shadow-[0_0_20px_rgba(59,130,246,0.4)] hover:shadow-[0_0_30px_rgba(59,130,246,0.6)] transition-all duration-300 flex items-center gap-2 whitespace-nowrap border border-blue-500/30"
               >
-                🚨 Request Emergency Corridor
+                {!isLoaded ? (
+                  <div className="w-3.5 h-3.5 border-2 border-white/30 border-t-white rounded-full animate-spin" />
+                ) : (
+                  <>🚨 Request Emergency Corridor</>
+                )}
               </button>
             )}
             {session === "pending" && (
-              <button className="act-btn act-pending" disabled>
-                <div className="spinner" /> Awaiting Admin Approval…
+              <button className="px-6 py-2.5 bg-amber-600/20 text-amber-500 border border-amber-500/30 font-bold tracking-[0.15em] text-[11px] uppercase rounded-xl flex items-center gap-2" disabled>
+                <div className="w-3 h-3 border-2 border-amber-500/30 border-t-amber-500 rounded-full animate-spin" /> Awaiting Approval
               </button>
             )}
             {session === "active" && (
-              <button className="act-btn act-terminate" onClick={() => setShowConfirm(true)}>
-                ⏹ Terminate Session
+              <button
+                onClick={() => setShowConfirm(true)}
+                className="px-6 py-2.5 bg-gray-900/60 hover:bg-gray-800/80 text-gray-300 border border-gray-600/50 font-bold tracking-[0.15em] text-[11px] uppercase rounded-xl transition-all duration-300 whitespace-nowrap"
+              >
+                ⏹ Terminate
               </button>
             )}
-            {session === "terminating" && (
-              <button className="act-btn act-disabled" disabled>
-                <div className="spinner" /> Terminating…
-              </button>
+            <Link href="/" className="text-[10px] text-gray-500 hover:text-white uppercase font-bold tracking-widest transition-colors ml-2">Exit</Link>
+          </div>
+        </div>
+      </header>
+
+      {/* Main Content Area */}
+      <div className="flex-1 flex flex-col p-5 lg:p-6 gap-5 overflow-hidden relative z-10 max-w-[2000px] mx-auto w-full">
+        {/* Top: Stats Bar */}
+        <div className="shrink-0">
+          <DashboardStats
+            activeEmergencies={isEmergencyActive ? 1 : 0}
+            availableAmbulances={availableAmbulances.length}
+            resolvedToday={1}
+            greenSignalsActivated={sim.trafficSignals.filter(s => s.status === 'green').length}
+          />
+        </div>
+
+        {/* Middle/Bottom: Split View */}
+        <div className="flex-1 flex flex-col lg:flex-row gap-5 min-h-0">
+          {/* Main Map Area */}
+          <div className={`flex-[2] lg:flex-[3] rounded-2xl overflow-hidden shadow-[0_0_50px_rgba(0,0,0,0.4)] bg-[#0B1221] border relative transition-all duration-1000 ${
+            isEmergencyActive
+              ? 'border-blue-500/30 shadow-[0_0_60px_rgba(59,130,246,0.15)] animate-border-glow'
+              : 'border-white/[0.06]'
+          }`}>
+            {isLoaded ? (
+              <MapView
+                onMapLoad={handleMapLoad}
+                origin={realGpsLocation}
+                ambulancePosition={isEmergencyActive ? (sim.ambulancePosition || realGpsLocation) : null}
+                destination={destination}
+                destinationName={destinationName}
+                routePoints={routePoints}
+                isEmergencyActive={isEmergencyActive}
+                bearing={sim.bearing}
+                etaMinutes={sim.etaMinutes}
+                remainingDistanceM={sim.remainingDistanceM}
+                directions={directionsResult}
+                routeInfo={routeInfo}
+                trafficSignals={sim.trafficSignals}
+                dummyCars={isEmergencyActive ? dummyCars : []}
+                nearbyAmbulances={!isEmergencyActive ? nearbyAmbulances.filter(a => a.lat && a.lng).map(a => ({ id: a.id, lat: a.lat!, lng: a.lng! })) : []}
+                viewMode="ambulance"
+                hospitals={hospitals}
+                selectedHospitalId={selectedHospitalId}
+                onHospitalSelect={handleHospitalSelect}
+                currentLeg={currentLeg}
+                ambulanceDepot={ambulanceDepot}
+              />
+            ) : (
+              <div className="w-full h-full flex flex-col items-center justify-center bg-[#0B1221]">
+                <div className="relative">
+                  <div className="w-14 h-14 border-[3px] border-[#2979FF]/15 border-t-[#2979FF] rounded-full animate-spin" />
+                  <div className="absolute inset-1 w-12 h-12 border-[3px] border-transparent border-b-blue-400/25 rounded-full animate-spin" style={{ animationDirection: 'reverse', animationDuration: '1.8s' }} />
+                </div>
+                <p className="mt-5 font-mono text-gray-500 text-[10px] tracking-[0.25em] uppercase">Initializing Map Engine</p>
+              </div>
             )}
           </div>
 
-          {/* ETA */}
-          <div className="sb-sec">
-            <div className="sb-title">Route & ETA</div>
-            <div className="eta-card">
-              <div>
-                <div className="eta-val">{etaText}</div>
-                <span className="eta-unit">ETA</span>
+          {/* Right Panel: Hospital/Ambulance Cards */}
+          <div id="hospital-cards-panel" className="flex-[1] lg:w-[32%] lg:h-full overflow-y-auto dark-scroll p-5 flex flex-col gap-3.5 rounded-2xl border border-white/[0.06] bg-[#0B1221]/80 backdrop-blur-2xl shadow-2xl">
+            {/* Nearby Hospitals section (always visible like ambulance page) */}
+            <div className="flex items-center justify-between mb-1">
+              <h2 className="text-white font-bold tracking-[0.15em] uppercase text-[11px] flex items-center gap-2">
+                <div className="w-6 h-6 rounded-lg bg-red-500/10 border border-red-500/20 flex items-center justify-center">
+                  <span className="text-xs">🏥</span>
+                </div>
+                Nearby Hospitals
+                {hospitals.length > 0 && (
+                  <span className="text-[10px] text-gray-500 font-mono font-normal tracking-normal bg-white/[0.03] px-1.5 py-0.5 rounded">{hospitals.length}</span>
+                )}
+              </h2>
+              {searchingHospitals && <span className="w-3 h-3 border-2 border-blue-500/30 border-t-blue-500 rounded-full animate-spin"></span>}
+            </div>
+
+            {hospitals.map((h, i) => (
+              <HospitalCard
+                key={h.id}
+                hospital={h}
+                isNearest={i === 0}
+                isSelected={h.id === selectedHospitalId}
+                onSelect={(hospital) => handleHospitalSelect(hospital)}
+              />
+            ))}
+
+            {hospitals.length === 0 && !searchingHospitals && (
+              <div className="flex flex-col items-center justify-center py-8 gap-3">
+                <div className="w-14 h-14 rounded-2xl bg-gray-800/50 border border-gray-700/30 flex items-center justify-center mb-1">
+                  <span className="text-2xl opacity-40">🏥</span>
+                </div>
+                <p className="text-gray-500 text-sm text-center">
+                  {hospitalsError || "No hospitals found nearby."}
+                </p>
+                <p className="text-gray-600 text-[10px] text-center font-mono tracking-wider uppercase">
+                  Try searching or expanding the area
+                </p>
+                {origin && (
+                  <button
+                    onClick={() => resetAndRetry(mapInstance, origin)}
+                    className="mt-1 px-5 py-2 bg-blue-600/20 hover:bg-blue-600/30 text-blue-400 text-[11px] font-bold tracking-[0.15em] uppercase rounded-xl border border-blue-500/20 hover:border-blue-500/40 transition-all duration-300"
+                  >
+                    ↻ Retry Search
+                  </button>
+                )}
               </div>
-              <div className="eta-dest">
-                <strong>Civil Hospital</strong>
-                <span>via MG Road, Pune</span>
+            )}
+
+            {/* Ambulances & Session-specific sections */}
+            {session === "idle" ? (
+              <>
+                {/* Ambulance section separator */}
+                <div className="flex items-center justify-between mb-1 mt-3">
+                  <h2 className="text-white font-bold tracking-[0.15em] uppercase text-[11px] flex items-center gap-2">
+                    <div className="w-6 h-6 rounded-lg bg-emerald-500/10 border border-emerald-500/20 flex items-center justify-center">
+                      <span className="text-xs">🚑</span>
+                    </div>
+                    Nearby Ambulances
+                    {nearbyAmbulances.length > 0 && (
+                      <span className="text-[10px] text-gray-500 font-mono font-normal tracking-normal bg-white/[0.03] px-1.5 py-0.5 rounded">{nearbyAmbulances.length}</span>
+                    )}
+                  </h2>
+                </div>
+
+                {!plateSubmitted && (
+                  <div className="p-3.5 rounded-xl border border-white/[0.05] bg-white/[0.02]">
+                    <div className="text-[10px] uppercase text-gray-500 tracking-wider mb-2 font-mono flex items-center gap-1.5">
+                      <span className="text-[8px] px-1 py-px bg-amber-500/20 text-amber-500 rounded border border-amber-500/30">LOCKED</span>
+                      Vehicle Plate Number *
+                    </div>
+                    <div className="flex gap-2">
+                      <input
+                        className="flex-1 bg-[#050b14] border border-white/[0.1] rounded-lg px-3 py-2 text-sm font-mono text-white outline-none focus:border-blue-500/50"
+                        type="text" placeholder="MH-12-AB-1234" value={plateNumber}
+                        onChange={(e) => setPlateNumber(e.target.value)} maxLength={15}
+                      />
+                      <button onClick={handlePlateSubmit} disabled={!plateNumber.trim()}
+                        className="px-4 py-2 bg-blue-600/20 hover:bg-blue-600/30 text-blue-400 font-bold tracking-widest text-[10px] uppercase rounded-lg border border-blue-500/20 transition-all disabled:opacity-50">
+                        Set
+                      </button>
+                    </div>
+                  </div>
+                )}
+
+                {nearbyAmbulances.map((a) => (
+                  <div key={a.id} className="p-3.5 rounded-xl flex flex-col gap-3 transition-colors border bg-[#0B1221] hover:bg-white/[0.04] shadow-lg relative overflow-hidden group border-white/[0.06]">
+                    <div className={`absolute top-0 left-0 bottom-0 w-1 ${
+                      a.status === 'available' ? 'bg-gradient-to-b from-emerald-400 to-emerald-600' :
+                      a.status === 'en-route' ? 'bg-gradient-to-b from-orange-400 to-orange-600' :
+                      'bg-gradient-to-b from-red-400 to-red-600'
+                    }`} />
+                    <div className="flex justify-between items-center pl-2 relative z-10">
+                      <div className="flex items-center gap-2.5">
+                        <span className="text-lg opacity-80">🚑</span>
+                        <div>
+                          <div className="text-xs font-mono font-bold text-white tracking-wider">{a.id}</div>
+                          <div className="text-[10px] font-mono text-gray-400 mt-0.5">{a.distance} · {a.eta} AWAY</div>
+                        </div>
+                      </div>
+                      <div className={`text-[9px] font-mono uppercase tracking-widest px-2 py-1 rounded border ${
+                        a.status === 'available' ? 'bg-emerald-500/10 text-emerald-400 border-emerald-500/20' :
+                        a.status === 'en-route' ? 'bg-orange-500/10 text-orange-400 border-orange-500/20' :
+                        'bg-red-500/10 text-red-400 border-red-500/20'
+                      }`}>
+                        {a.status === 'available' && <div className="w-1 h-1 rounded-full bg-emerald-400 animate-pulse mr-1.5 inline-block"/>}
+                        {a.status}
+                      </div>
+                    </div>
+                    {a.status !== "busy" && (
+                      <div className="pl-2 relative z-10">
+                        <button onClick={() => assignAmbulance(a)} disabled={!plateSubmitted}
+                          className="w-full py-2 bg-emerald-500/10 hover:bg-emerald-500/20 text-emerald-400 font-bold tracking-[0.1em] text-[10px] uppercase rounded-lg border border-emerald-500/20 hover:border-emerald-500/40 transition-all disabled:opacity-50">
+                          Assign Dispatch Request
+                        </button>
+                      </div>
+                    )}
+                  </div>
+                ))}
+              </>
+            ) : (
+              <>
+                <div className="flex items-center justify-between mb-3 mt-3 p-3.5 rounded-xl bg-emerald-500/10 border border-emerald-500/20">
+                  <h2 className="text-white font-bold tracking-[0.15em] uppercase text-[11px] flex items-center gap-2">
+                    <div className="w-6 h-6 rounded-lg bg-emerald-500/20 border border-emerald-500/30 flex items-center justify-center">
+                      <span className="text-xs">✓</span>
+                    </div>
+                    Ambulance Booked
+                  </h2>
+                </div>
+
+                <div className="mt-4 p-3.5 rounded-xl border border-white/[0.05] bg-white/[0.02]">
+                  <div className="text-[10px] uppercase text-gray-500 tracking-wider mb-2 font-mono flex items-center gap-1.5">
+                    <span className={`text-[8px] px-1 py-px rounded border ${
+                      currentLeg === 'depot-to-patient'
+                        ? 'bg-orange-500/20 text-orange-500 border-orange-500/30'
+                        : 'bg-emerald-500/20 text-emerald-500 border-emerald-500/30'
+                    }`}>
+                      {currentLeg === 'depot-to-patient' ? 'PHASE 1' : 'PHASE 2'}
+                    </span>
+                    Journey Status
+                  </div>
+                  <div className="text-[10px] font-mono text-gray-300">
+                    {currentLeg === 'depot-to-patient' ? (
+                      <div className="flex items-center gap-2">
+                        <div className="w-2 h-2 rounded-full bg-orange-500 animate-pulse" />
+                        Ambulance approaching patient...
+                      </div>
+                    ) : (
+                      <div className="flex items-center gap-2">
+                        <div className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse" />
+                        Patient onboard, en route to hospital
+                      </div>
+                    )}
+                  </div>
+                </div>
+              </>
+            )}
+
+            {/* Session Logs Panel */}
+            <div className={`mt-auto pt-4 border-t border-white/[0.05] transition-all duration-500 ${session === 'idle' && nearbyAmbulances.length > 0 ? 'h-[140px]' : 'h-1/3'}`}>
+              <div className="text-[10px] font-mono tracking-widest text-gray-500 uppercase flex items-center gap-1.5 mb-2">
+                <svg className="w-3 h-3 text-gray-500" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 6h16M4 12h16M4 18h7" />
+                </svg>
+                Session Logs
+              </div>
+              <div className="h-full overflow-y-auto dark-scroll flex flex-col gap-1.5 text-[10px] font-mono pr-2 pb-5" ref={logRef}>
+                {log.map((e, i) => (
+                  <div key={i} className="flex gap-2">
+                    <span className="text-gray-600 shrink-0">[{e.time}]</span>
+                    <span className={`leading-snug ${
+                      e.type === 'success' ? 'text-emerald-400' :
+                      e.type === 'error' ? 'text-red-400' :
+                      e.type === 'warn' ? 'text-amber-400' : 'text-gray-400'
+                    }`}>
+                      {e.type === 'success' && <span className="mr-1">✓</span>}
+                      {e.type === 'warn' && <span className="mr-1">⚠</span>}
+                      {e.msg}
+                    </span>
+                  </div>
+                ))}
+                {log.length === 0 && <div className="text-gray-600 text-center mt-2 lowercase text-[9px] tracking-widest">awaiting action logs...</div>}
               </div>
             </div>
           </div>
-
-          {/* Priority */}
-          <div className="sb-sec">
-            <div className="sb-title">Priority Score</div>
-            <div className="prio-card">
-              <div className="prio-num">70</div>
-              <div className="prio-right">
-                <div className="prio-bar-bg">
-                  <div className="prio-bar-fill" style={{ width: "70%" }} />
-                </div>
-                <div className="prio-label">HIGH — PRIVATE EMERGENCY</div>
-              </div>
-            </div>
-          </div>
-
-          {/* Log */}
-          <div className="log-wrap">
-            <div className="sb-title">Session Log</div>
-            <div className="log-scroll" ref={logRef}>
-              {log.length === 0 && (
-                <div className="log-empty">
-                  No events — enter plate & request corridor to begin.
-                </div>
-              )}
-              {log.map((e, i) => (
-                <div key={i} className="log-row">
-                  <span className="log-t">{e.time}</span>
-                  <span>
-                    {e.type === "success" ? "✓" : e.type === "warn" ? "⚠" : e.type === "error" ? "✗" : "›"}
-                  </span>
-                  <span className={`log-m ${e.type}`}>{e.msg}</span>
-                </div>
-              ))}
-            </div>
-          </div>
-
-        </aside>
+        </div>
       </div>
-    </>
+
+      {/* Confirm Terminate Modal */}
+      {showConfirm && (
+        <div className="fixed inset-0 bg-[#020617]/80 backdrop-blur-sm z-[200] flex items-center justify-center">
+          <div className="bg-[#0B1221] border border-red-500/30 rounded-2xl p-6 max-w-sm w-full shadow-2xl">
+            <h3 className="text-lg font-bold tracking-widest text-red-500 uppercase mb-2">Terminate Session?</h3>
+            <p className="text-xs text-gray-400 leading-relaxed mb-6 font-mono">
+              This will close the virtual corridor, lift the geo-fence, and clear all driver alerts.
+            </p>
+            <div className="flex gap-3">
+              <button className="flex-1 py-2 rounded-lg bg-white/[0.05] hover:bg-white/[0.1] text-white text-[11px] font-bold tracking-wider uppercase transition-colors" onClick={() => setShowConfirm(false)}>Cancel</button>
+              <button className="flex-1 py-2 rounded-lg bg-red-600 hover:bg-red-500 text-white text-[11px] font-bold tracking-wider uppercase transition-colors shadow-[0_0_15px_rgba(220,38,38,0.4)]" onClick={terminate}>Terminate</button>
+            </div>
+          </div>
+        </div>
+      )}
+      {routeInfo && selectedHospital && (
+        <RouteInfoBar
+          hospital={selectedHospital}
+          routeInfo={routeInfo}
+          onChangeHospital={handleChangeHospital}
+          onStartEmergency={requestCorridor}
+        />
+      )}
+    </div>
   );
 }

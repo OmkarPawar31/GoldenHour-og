@@ -143,7 +143,7 @@ export default function HospitalDashboard() {
     };
 
     useEffect(() => {
-        if (window.google?.maps) { setMapReady(true); return; }
+        if (typeof window !== 'undefined' && window.google?.maps) { setMapReady(true); return; }
         const s = document.createElement("script");
         s.src = `https://maps.googleapis.com/maps/api/js?key=${MAPS_API_KEY}&libraries=geometry,places`;
         s.async = true;
@@ -240,7 +240,7 @@ export default function HospitalDashboard() {
     }, []);
 
     const inboundAmbulances = useMemo(() => {
-        if (!window.google?.maps?.geometry) return tracking.activeAmbulances;
+        if (typeof window === 'undefined' || !window.google?.maps?.geometry) return tracking.activeAmbulances;
         return tracking.activeAmbulances.filter(a => {
             if (!a.destination) return false;
             // Name match or within 1.5km
