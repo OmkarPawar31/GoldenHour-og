@@ -63,6 +63,7 @@ export function useNearbyHospitals() {
             headers: { "Content-Type": "application/x-www-form-urlencoded" },
             body: `data=${encodeURIComponent(retryQuery)}`,
           });
+          if (!retry.ok) throw new Error(`Overpass retry error: ${retry.status}`);
           const retryData = await retry.json();
           data.elements = retryData.elements || [];
         }
@@ -73,25 +74,28 @@ export function useNearbyHospitals() {
           return;
         }
 
-        const mapped: Hospital[] = data.elements
-          .map((el: {
-            type: string;
-            id: number;
-            lat?: number;
-            lon?: number;
-            center?: { lat: number; lon: number };
-            tags?: { name?: string; "name:en"?: string; "addr:full"?: string; "addr:street"?: string };
-          }) => {
+        type OsmElement = {
+          type: string;
+          id: number;
+          lat?: number;
+          lon?: number;
+          center?: { lat: number; lon: number };
+          tags?: { name?: string; "name:en"?: string; "addr:full"?: string; "addr:street"?: string };
+        };
+
+        const elements = data.elements as OsmElement[];
+        const mapped: Hospital[] = elements
+          .map((el) => {
             // nodes have lat/lon directly, ways have center
             const lat = el.lat ?? el.center?.lat;
             const lon = el.lon ?? el.center?.lon;
             if (!lat || !lon) return null;
 
+            // Skip entries with no meaningful name
+            const name = el.tags?.name || el.tags?.["name:en"];
+            if (!name) return null;
+
             const loc: Location = { lat, lng: lon };
-            const name =
-              el.tags?.name ||
-              el.tags?.["name:en"] ||
-              "Hospital";
 
             const address =
               el.tags?.["addr:full"] ||
@@ -106,9 +110,8 @@ export function useNearbyHospitals() {
               distance: haversineDist(origin, loc),
             };
           })
-          .filter(Boolean)
-          .filter((h: Hospital) => h.name !== "Hospital") // filter unnamed
-          .sort((a: Hospital, b: Hospital) => a.distance - b.distance)
+          .filter((h): h is Hospital => h !== null)
+          .sort((a, b) => a.distance - b.distance)
           .slice(0, 5);
 
         if (mapped.length === 0) {

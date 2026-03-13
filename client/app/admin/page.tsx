@@ -1,6 +1,8 @@
 "use client";
 
 import { useState, useEffect, useCallback, useRef } from "react";
+import gsap from "gsap";
+import { useGSAP } from "@gsap/react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { apiGet } from "../../services/api";
@@ -107,6 +109,7 @@ function generateSimAlert(): AmbulanceAlert {
 //  MAIN COMPONENT
 // ──────────────────────────────────────────────────
 export default function AdminPage() {
+  const router = useRouter();
   const [tab, setTab] = useState<Tab>("overview");
   const [dashboard, setDashboard] = useState<DashboardData | null>(null);
   const [users, setUsers] = useState<UserEntry[]>([]);
@@ -124,11 +127,34 @@ export default function AdminPage() {
   const alertsEndRef = useRef<HTMLDivElement>(null);
   const simIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const audioRef = useRef<HTMLAudioElement | null>(null);
+  const pageRef = useRef<HTMLDivElement>(null);
+
+  // GSAP entrance animations
+  useGSAP(() => {
+    if (!pageRef.current) return;
+    const tl = gsap.timeline({ defaults: { ease: "power3.out" } });
+    tl.fromTo(".adm-topbar",       { y: -20, autoAlpha: 0 }, { y: 0, autoAlpha: 1, duration: 0.5 })
+      .fromTo(".adm-body",         { y: 20,  autoAlpha: 0 }, { y: 0, autoAlpha: 1, duration: 0.5 }, "-=0.3")
+      .fromTo(".adm-tabs",         { y: 12,  autoAlpha: 0 }, { y: 0, autoAlpha: 1, duration: 0.4 }, "-=0.3");
+  }, { scope: pageRef, dependencies: [loading] });
+
+  // Animate stat cards when they appear
+  useGSAP(() => {
+    if (loading || !dashboard) return;
+    gsap.fromTo(".adm-card",
+      { y: 24, autoAlpha: 0, scale: 0.96 },
+      { y: 0, autoAlpha: 1, scale: 1, duration: 0.55, stagger: 0.1, ease: "back.out(1.4)", delay: 0.1 }
+    );
+    gsap.fromTo(".adm-section-title, .adm-table-wrap",
+      { y: 16, autoAlpha: 0 },
+      { y: 0, autoAlpha: 1, duration: 0.5, stagger: 0.12, ease: "power3.out", delay: 0.4 }
+    );
+  }, { scope: pageRef, dependencies: [loading, tab, dashboard] });
 
   // Initialize alert sound
   useEffect(() => {
     if (typeof window !== "undefined") {
-      audioRef.current = new Audio("data:audio/wav;base64,UklGRnoGAABXQVZFZm10IBAAAAABAAEAQB8AAEAfAAABAAgAZGF0YQoGAACBhYqFbF1PQ0A+QUNTO2hdUkxJSk1QUlRST0tHREJBQUJDREVGRkdHR0dGRkVEQ0JBQUFCQkNEREVFRkZHR0hISEdHRkVEQ0JBQUFCQkNEREVFRkZGRkZFRURDQkFBQUFCQkNERERFRUZGRUVFREREQ0JCQUFBQUJCQ0NEREVERS8tLCsqKSkpKisrLC4vLzAxMTIyMzMzMzMyMjEwLy4tLCsqKiopKSkpKSkpKSkpKSorKywsLS4uLy8wMDExMjIyMjIyMTEwMC8uLS0sKysqKSkpKSkpKSoqKissLC0tLi8vLzAwMTExMTExMTEwMC8vLi4tLCwrKysqKioqKioqKyssLC0tLi4vLy8wMDAwMDAwMDAvLy4uLS0sLCsrKysqKioqKioqKyssLC0tLi4uLy8vMDAwMDAwLy8vLi4tLS0sLCwrKysrKioqKisrKyssLC0tLS4uLi8vLy8wMDAvLy8uLi4tLS0sLCwsKysrKysrKysrKywsLC0tLS4uLi4vLy8vLy8vLy4uLi0tLS0sLCwsLCsrKysrKysrLCwsLC0tLS0uLi4uLy8vLy8vLi4uLi0tLS0tLCwsLCwrKysrKysrLCwsLC0tLS0uLi4uLi8vLy8vLi4uLi0tLS0tLSwsLCwsKysrKysrLCwsLC0tLS0tLi4uLi4vLy8vLi4uLi4tLS0tLSwsLCwsLCwrKysrLCwsLC0tLS0tLS4uLi4uLi4uLi4uLi4tLS0tLS0sLCwsLCwsLCwsLCwsLC0tLS0tLS4uLi4uLi4uLi4uLi0tLS0tLS0sLCwsLCwsLCwsLCwtLS0tLS0tLi4uLi4uLi4uLi4tLS0tLS0tLSwsLCwsLCwsLCwtLS0tLS0tLS4uLi4uLi4uLi4tLS0tLS0tLS0sLCwsLCwsLC0tLS0tLS0tLS4uLi4uLi4uLi0tLS0tLS0tLS0sLCwsLCwsLS0tLS0tLS0uLi4uLi4uLi4tLS0tLS0tLS0tLSwsLCwtLS0tLS0tLS0uLi4uLi4uLi0tLS0tLS0tLS0tLSwsLC0tLS0tLS0tLi4uLi4uLi4tLS0tLS0tLS0tLS0sLC0tLS0tLS0tLi4uLi4uLi4tLS0tLS0tLS0tLS0tLS0tLS0tLS0uLi4uLi4uLS0tLS0tLS0tLS0tLS0tLS0tLS0tLi4uLi4uLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0uLi4uLi4tLS0tLS0tLS0tLS0t");
+      audioRef.current = new Audio("data:audio/wav;base64,UklGRnoGAABXQVZFZm10IBAAAAABAAEAQB8AAEAfAAABAAgAZGF0YQoGAACBhYqFbF1PQ0A+QUNTO2hdUkxJSk1QUlRST0tHREJBQUJDREVGRkdHR0dGRkVEQ0JBQUFCQkNEREVFRkZHR0hISEdHRkVEQ0JBQUFCQkNEREVFRkZGRkZFRURDQkFBQUFCQkNERERFRUZGRUVFREREQ0JCQUFBQUJCQ0NEREVERS8tLCsqKSkpKisrLC4vLzAxMTIyMzMzMzMyMjEwLy4tLCsqKiopKSkpKSkpKSkpKSorKywsLS4uLy8wMDExMjIyMjIyMTEwMC8uLS0sKysqKSkpKSkpKSoqKissLC0tLi8vLzAwMTExMTExMTEwMC8vLi4tLCwrKysqKioqKioqKyssLC0tLi4vLy8wMDAwMDAwMDAvLy4uLS0sLCsrKysqKioqKioqKyssLC0tLi4uLy8vMDAwMDAwLy8vLi4tLS0sLCwrKysrKioqKisrKyssLC0tLS4uLi8vLy8wMDAvLy8uLi4tLS0sLCwsKysrKysrKysrKywsLC0tLS4uLi4vLy8vLy8vLy4uLi0tLS0sLCwsLCsrKysrKysrLCwsLC0tLS0uLi4uLy8vLy8vLi4uLi0tLS0tLCwsLCwrKysrKysrLCwsLC0tLS0uLi4uLi8vLy8vLi4uLi4tLS0tLSwsLCwsLCwrKysrLCwsLC0tLS0tLS4uLi4uLi4uLi4uLi4tLS0tLS0sLCwsLCwsLCwsLCwsLC0tLS0tLS4uLi4uLi4uLi4uLi0tLS0tLS0sLCwsLCwsLCwsLCwtLS0tLS0tLi4uLi4uLi4uLi4tLS0tLS0tLSwsLCwsLCwsLCwtLS0tLS0tLS4uLi4uLi4uLi4tLS0tLS0tLS0sLCwsLCwsLC0tLS0tLS0tLS4uLi4uLi4uLi0tLS0tLS0tLS0sLCwsLCwsLS0tLS0tLS0uLi4uLi4uLi4tLS0tLS0tLS0tLSwsLCwtLS0tLS0tLS0uLi4uLi4uLi0tLS0tLS0tLS0tLSwsLC0tLS0tLS0tLi4uLi4uLi4tLS0tLS0tLS0tLS0sLC0tLS0tLS0tLi4uLi4uLi4tLS0tLS0tLS0tLS0tLS0tLS0tLS0uLi4uLi4uLS0tLS0tLS0tLS0tLS0tLS0tLS0tLi4uLi4uLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0uLi4uLi4tLS0tLS0tLS0tLS0t");
     }
   }, []);
 
@@ -276,9 +302,9 @@ export default function AdminPage() {
   }
 
   return (
-    <>
+    <div ref={pageRef}>
       <style>{`
-        @import url('https://fonts.googleapis.com/css2?family=DM+Sans:wght@300;400;500;700&family=JetBrains+Mono:wght@400;600&family=Bebas+Neue&display=swap');
+        /* Fonts moved to layout.tsx */
 
         * { margin: 0; padding: 0; box-sizing: border-box; }
 
@@ -655,6 +681,19 @@ export default function AdminPage() {
       `}</style>
 
       <div className="adm-wrap">
+        <header className="adm-topbar" style={{ background: 'var(--cream)', borderBottom: '1.5px solid var(--border)', padding: '0 2rem', height: 60, display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+          <Link href="/" style={{ fontSize: '1.2rem', fontWeight: 800, color: 'var(--orange)', textDecoration: 'none' }}>
+            GreenCorridor <span style={{ color: 'var(--text)' }}>Admin</span>
+          </Link>
+          <button onClick={handleLogout} style={{
+            padding: '8px 16px', borderRadius: '8px', border: '1.5px solid var(--border)',
+            background: '#fff', color: 'var(--muted)', cursor: 'pointer',
+            fontSize: '0.85rem', fontWeight: 600, fontFamily: 'DM Sans, sans-serif',
+            transition: 'all 0.2s'
+          }}>
+            Logout
+          </button>
+        </header>
         <div className="adm-body">
           {loading ? (
             <div className="adm-loading">
@@ -675,7 +714,7 @@ export default function AdminPage() {
               <div className="adm-page-title">Admin War Room</div>
               <div className="adm-page-sub">Monitor active emergencies, users, and corridor sessions in real time.</div>
 
-              <div className="adm-tabs">
+            <div className="adm-tabs">
                 <button className={`adm-tab ${tab === "overview" ? "active" : ""}`} onClick={() => setTab("overview")}>
                   📊 Overview
                 </button>
@@ -1053,6 +1092,6 @@ export default function AdminPage() {
           )}
         </div>
       </div>
-    </>
+    </div>
   );
 }

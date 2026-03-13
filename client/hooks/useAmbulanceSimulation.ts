@@ -130,6 +130,7 @@ export function useAmbulanceSimulation({
     const routePointsRef = useRef<LatLng[]>([]);
     const speedRef = useRef(DEFAULT_SPEED_KMH);
     const isActiveRef = useRef(false);
+    const isCompleteRef = useRef(false);
     const signalsFetchedRef = useRef(false);
     const dummyCarsRef = useRef<DummyCar[]>([]);
     const dummyCarsPlacedRef = useRef(false);
@@ -146,6 +147,10 @@ export function useAmbulanceSimulation({
     useEffect(() => {
         isActiveRef.current = isActive;
     }, [isActive]);
+
+    useEffect(() => {
+        isCompleteRef.current = isComplete;
+    }, [isComplete]);
 
     /* ── Speed setter ── */
     const setSpeed = useCallback((s: number) => {
@@ -181,12 +186,17 @@ export function useAmbulanceSimulation({
         async (points: LatLng[]) => {
             if (points.length === 0) return;
 
-            // Calculate midpoint of route for query
-            const midIdx = Math.floor(points.length / 2);
-            const midLat = points[midIdx].lat;
-            const midLng = points[midIdx].lng;
+            // Use a bounding box covering the full route extent to capture signals at start/end
+            const lats = points.map(p => p.lat);
+            const lngs = points.map(p => p.lng);
+            const minLat = Math.min(...lats);
+            const maxLat = Math.max(...lats);
+            const minLng = Math.min(...lngs);
+            const maxLng = Math.max(...lngs);
+            // Add a small padding (~200m) around the bounding box
+            const pad = 0.002;
 
-            const query = `[out:json][timeout:25];node["highway"="traffic_signals"](around:${SIGNAL_FETCH_RADIUS_M},${midLat},${midLng});out body;`;
+            const query = `[out:json][timeout:25];node["highway"="traffic_signals"](${minLat - pad},${minLng - pad},${maxLat + pad},${maxLng + pad});out body;`;
 
             try {
                 const response = await fetch(OVERPASS_URL, {
@@ -485,54 +495,14 @@ export function useAmbulanceSimulation({
 
     /* ── Restart animation when speed changes ── */
     useEffect(() => {
-        if (!isActive || routePoints.length === 0 || isComplete) return;
+        if (!isActive || routePoints.length === 0 || isCompleteRef.current) return;
 
-        // Restart interval with new speed
+        // Simply clear the existing interval; the main animation effect will restart it
+        // because speedKmh is now also a dependency of the main effect.
         if (animIntervalRef.current) {
             clearInterval(animIntervalRef.current);
+            animIntervalRef.current = null;
         }
-
-        animIntervalRef.current = setInterval(() => {
-            if (!isActiveRef.current) return;
-
-            const points = routePointsRef.current;
-            if (points.length === 0) return;
-
-            const step = speedRef.current >= 60 ? 3 : speedRef.current >= 40 ? 2 : 1;
-            currentIndexRef.current = Math.min(currentIndexRef.current + step, points.length - 1);
-            const idx = currentIndexRef.current;
-
-            if (idx >= points.length - 1) {
-                setAmbulancePosition(points[points.length - 1]);
-                setProgressPercent(100);
-                if (animIntervalRef.current) {
-                    clearInterval(animIntervalRef.current);
-                    animIntervalRef.current = null;
-                }
-                currentIndexRef.current = 0;
-                if (onLegComplete) {
-                    onLegComplete();
-                } else {
-                    setIsComplete(true);
-                }
-                return;
-            }
-
-            const pos = points[idx];
-            const nextPos = points[Math.min(idx + 1, points.length - 1)];
-            setAmbulancePosition(pos);
-            setBearing(computeBearing(pos, nextPos));
-            checkSignalProximity(pos);
-            checkDummyCarProximity(pos);
-            updateStats(idx, points);
-        }, getAnimIntervalMs());
-
-        return () => {
-            if (animIntervalRef.current) {
-                clearInterval(animIntervalRef.current);
-                animIntervalRef.current = null;
-            }
-        };
         // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [speedKmh]);
 

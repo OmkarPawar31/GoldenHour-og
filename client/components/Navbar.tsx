@@ -5,15 +5,23 @@ import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { clearAuth } from "../utils/auth";
 import "./Navbar.css";
+import gsap from "gsap";
+import { useGSAP } from "@gsap/react";
+import { useRef } from "react";
+import { 
+  Ambulance, Building2, Monitor, CarFront, 
+  ClipboardList, RadioTower, LifeBuoy, 
+  Home, LogOut 
+} from "lucide-react";
 
-const ROLE_NAV: Record<string, { icon: string; label: string; href: string }> = {
-  ambulance: { icon: "🚑", label: "Ambulance",     href: "/ambulance" },
-  hospital:  { icon: "🏥", label: "Hospital",      href: "/hospital"  },
-  admin:     { icon: "🖥️", label: "Admin",         href: "/admin"     },
-  driver:    { icon: "🚗", label: "Driver",         href: "/driver"    },
-  private:   { icon: "🚗", label: "Emergency",     href: "/private-emergency" },
-  organizer: { icon: "📋", label: "Control Room",  href: "/operator" },
-  signal:    { icon: "🚦", label: "Smart Signal",  href: "/signal" },
+const ROLE_NAV: Record<string, { icon: React.ReactNode; label: string; href: string }> = {
+  ambulance: { icon: <Ambulance size={18} />, label: "Ambulance",     href: "/ambulance" },
+  hospital:  { icon: <Building2 size={18} />, label: "Hospital",      href: "/hospital"  },
+  admin:     { icon: <Monitor size={18} />, label: "Admin",         href: "/admin"     },
+  driver:    { icon: <CarFront size={18} />, label: "Driver",         href: "/driver"    },
+  private:   { icon: <CarFront size={18} />, label: "Emergency",     href: "/private-emergency" },
+  organizer: { icon: <ClipboardList size={18} />, label: "Control Room",  href: "/operator" },
+  signal:    { icon: <RadioTower size={18} />, label: "Smart Signal",  href: "/signal" },
 };
 
 export default function Navbar() {
@@ -40,6 +48,13 @@ export default function Navbar() {
   }, [pathname]);
 
   useEffect(() => { setMobileOpen(false); }, [pathname]);
+
+  const navRef = useRef<HTMLElement>(null);
+  useGSAP(() => {
+    gsap.fromTo(".gh-nav-logo", { y: -20, autoAlpha: 0 }, { y: 0, autoAlpha: 1, duration: 0.6, ease: "power3.out" });
+    gsap.fromTo(".gh-nav-links > *", { y: -20, autoAlpha: 0 }, { y: 0, autoAlpha: 1, duration: 0.5, stagger: 0.05, ease: "power3.out", delay: 0.2 });
+    gsap.fromTo(".gh-nav-right > *", { y: -20, autoAlpha: 0 }, { y: 0, autoAlpha: 1, duration: 0.5, stagger: 0.05, ease: "power3.out", delay: 0.2 });
+  }, { scope: navRef });
 
   const handleLogout = () => {
     clearAuth();
@@ -78,7 +93,7 @@ export default function Navbar() {
 
   return (
     <>
-      <nav className="gh-navbar">
+      <nav className="gh-navbar" ref={navRef}>
         {/* Logo */}
         <Link href="/" className="gh-nav-logo">
           <div className="gh-nav-logo-dot" />
@@ -88,7 +103,7 @@ export default function Navbar() {
         {/* Desktop centre links (logged in) */}
         {loggedIn && (
           <div className="gh-nav-links">
-            <Link href="/" className={isActive("/") ? "active" : ""}><span className="nav-icon">🏠</span> Home</Link>
+            <Link href="/" className={isActive("/") ? "active" : ""}><span className="nav-icon"><Home size={18} /></span> Home</Link>
             {roleNav && (
               <Link href={roleNav.href} className={isActive(roleNav.href) ? "active" : ""}>
                 <span className="nav-icon">{roleNav.icon}</span> {roleNav.label}
@@ -103,16 +118,16 @@ export default function Navbar() {
             <>
               {role && <span className="gh-nav-role-badge">{ROLE_NAV[role]?.icon} {role}</span>}
               <div className="gh-nav-divider" />
-              <button onClick={handleLogout} className="gh-nav-logout">Logout</button>
+              <button onClick={handleLogout} className="gh-nav-logout"><LogOut size={16} /> Logout</button>
             </>
           ) : (
             <div className="gh-nav-portals">
-              <Link href="/login/ambulance" className="gh-nav-portal-btn" style={{ ["--portal-clr" as string]: "#E8571A" }}>🚑 Ambulance Driver</Link>
-              <Link href="/login/hospital"  className="gh-nav-portal-btn" style={{ ["--portal-clr" as string]: "#3B82F6" }}>🏥 Hospital</Link>
-              <Link href="/login/operator"  className="gh-nav-portal-btn" style={{ ["--portal-clr" as string]: "#8B5CF6" }}>📋 Operator</Link>
-              <Link href="/login/admin"     className="gh-nav-portal-btn" style={{ ["--portal-clr" as string]: "#10B981" }}>🖥️ Admin / Traffic Control</Link>
-              <Link href="/signal"          className="gh-nav-portal-btn" style={{ ["--portal-clr" as string]: "#F59E0B" }}>🚦 Smart Signal</Link>
-              <a href="#" onClick={openEmergencyModal} className="gh-nav-portal-btn gh-nav-portal-btn--emergency">🆘 Emergency User</a>
+              <Link href="/login/ambulance" className="gh-nav-portal-btn flex items-center gap-1.5" style={{ ["--portal-clr" as string]: "#E8571A" }}><Ambulance size={16} /> Ambulance Driver</Link>
+              <Link href="/login/hospital"  className="gh-nav-portal-btn flex items-center gap-1.5" style={{ ["--portal-clr" as string]: "#3B82F6" }}><Building2 size={16} /> Hospital</Link>
+              <Link href="/login/operator"  className="gh-nav-portal-btn flex items-center gap-1.5" style={{ ["--portal-clr" as string]: "#8B5CF6" }}><ClipboardList size={16} /> Operator</Link>
+              <Link href="/login/admin"     className="gh-nav-portal-btn flex items-center gap-1.5" style={{ ["--portal-clr" as string]: "#10B981" }}><Monitor size={16} /> Admin Control</Link>
+              <Link href="/signal"          className="gh-nav-portal-btn flex items-center gap-1.5" style={{ ["--portal-clr" as string]: "#F59E0B" }}><RadioTower size={16} /> Smart Signal</Link>
+              <a href="#" onClick={openEmergencyModal} className="gh-nav-portal-btn gh-nav-portal-btn--emergency flex items-center gap-1.5"><LifeBuoy size={16} /> Emergency</a>
             </div>
           )}
           <button className={`gh-nav-hamburger ${mobileOpen ? "open" : ""}`} onClick={() => setMobileOpen(!mobileOpen)} aria-label="Toggle navigation">
@@ -124,19 +139,19 @@ export default function Navbar() {
         <div className={`gh-nav-mobile-menu ${mobileOpen ? "open" : ""}`}>
           {loggedIn ? (
             <>
-              <Link href="/" className={isActive("/") ? "active" : ""}><span>🏠</span> Home</Link>
+              <Link href="/" className={isActive("/") ? "active" : ""}><span><Home size={18} /></span> Home</Link>
               {roleNav && <Link href={roleNav.href} className={isActive(roleNav.href) ? "active" : ""}><span>{roleNav.icon}</span> {roleNav.label}</Link>}
               <div className="gh-nav-mobile-divider" />
-              <button onClick={handleLogout}><span>🚪</span> Logout</button>
+              <button onClick={handleLogout}><span><LogOut size={18} /></span> Logout</button>
             </>
           ) : (
             <>
-              <Link href="/login/ambulance"><span>🚑</span> Ambulance Driver</Link>
-              <Link href="/login/hospital"><span>🏥</span> Hospital Control</Link>
-              <Link href="/login/operator"><span>📋</span> Event Operator</Link>
-              <Link href="/login/admin"><span>🖥️</span> Admin / Traffic</Link>
-              <Link href="/signal"><span>🚦</span> Smart Signal</Link>
-              <a href="#" onClick={openEmergencyModal}><span>🆘</span> Emergency User</a>
+              <Link href="/login/ambulance" className="flex items-center gap-2"><span><Ambulance size={18} /></span> Ambulance Driver</Link>
+              <Link href="/login/hospital" className="flex items-center gap-2"><span><Building2 size={18} /></span> Hospital Control</Link>
+              <Link href="/login/operator" className="flex items-center gap-2"><span><ClipboardList size={18} /></span> Event Operator</Link>
+              <Link href="/login/admin" className="flex items-center gap-2"><span><Monitor size={18} /></span> Admin / Traffic</Link>
+              <Link href="/signal" className="flex items-center gap-2"><span><RadioTower size={18} /></span> Smart Signal</Link>
+              <a href="#" onClick={openEmergencyModal} className="flex items-center gap-2"><span><LifeBuoy size={18} /></span> Emergency User</a>
             </>
           )}
         </div>
@@ -153,7 +168,9 @@ export default function Navbar() {
             <div style={{ padding: "2.2rem 2.5rem 2.5rem" }}>
               <button onClick={closeModal} style={{ position: "absolute", top: "1.4rem", right: "1.6rem", background: "none", border: "none", fontSize: "1.4rem", cursor: "pointer", color: "#94A3B8", lineHeight: 1 }}>×</button>
               <div style={{ display: "flex", alignItems: "center", gap: "1rem", marginBottom: "1.6rem" }}>
-                <div style={{ width: "52px", height: "52px", borderRadius: "16px", background: "rgba(245,158,11,0.1)", display: "flex", alignItems: "center", justifyContent: "center", fontSize: "1.8rem", flexShrink: 0 }}>🆘</div>
+                <div style={{ width: "52px", height: "52px", borderRadius: "16px", background: "rgba(245,158,11,0.1)", color: "#F59E0B", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
+                  <LifeBuoy size={28} />
+                </div>
                 <div>
                   <h2 style={{ fontFamily: "'Bebas Neue', cursive", fontSize: "1.8rem", letterSpacing: "0.03em", color: "#1E293B", lineHeight: 1 }}>Emergency Request</h2>
                   <p style={{ fontSize: "0.8rem", color: "#64748B", marginTop: "0.25rem", fontFamily: "'JetBrains Mono', monospace", letterSpacing: "0.06em", textTransform: "uppercase" }}>Priority Corridor Access</p>

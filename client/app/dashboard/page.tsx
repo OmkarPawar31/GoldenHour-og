@@ -1,9 +1,13 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import Link from "next/link";
+import gsap from "gsap";
+import { useGSAP } from "@gsap/react";
 import { apiGet } from "../../services/api";
 import { clearAuth } from "../../utils/auth";
+
+gsap.registerPlugin();
 
 interface UserProfile {
   _id: string;
@@ -28,6 +32,7 @@ export default function DashboardPage() {
   const [sessions, setSessions] = useState<SessionEntry[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
+  const containerRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     async function load() {
@@ -57,6 +62,33 @@ export default function DashboardPage() {
     load();
   }, []);
 
+  useGSAP(() => {
+    if (loading || error) return;
+    const ctx = gsap.context(() => {
+      gsap.fromTo(".dash-welcome",
+        { y: 30, autoAlpha: 0 },
+        { y: 0, autoAlpha: 1, duration: 0.6, ease: "power3.out", delay: 0.1 }
+      );
+      gsap.fromTo(".dash-card",
+        { y: 30, autoAlpha: 0 },
+        { y: 0, autoAlpha: 1, duration: 0.5, stagger: 0.08, ease: "power3.out", delay: 0.25 }
+      );
+      gsap.fromTo(".dash-section-title",
+        { x: -20, autoAlpha: 0 },
+        { x: 0, autoAlpha: 1, duration: 0.5, stagger: 0.1, ease: "power3.out", delay: 0.45 }
+      );
+      gsap.fromTo(".dash-quick-link",
+        { y: 20, autoAlpha: 0 },
+        { y: 0, autoAlpha: 1, duration: 0.4, stagger: 0.06, ease: "power3.out", delay: 0.55 }
+      );
+      gsap.fromTo(".dash-table-wrap",
+        { y: 30, autoAlpha: 0 },
+        { y: 0, autoAlpha: 1, duration: 0.6, ease: "power3.out", delay: 0.65 }
+      );
+    }, containerRef);
+    return () => ctx.revert();
+  }, { scope: containerRef, dependencies: [loading, error] });
+
   function handleLogout() {
     clearAuth();
     window.location.href = "/auth";
@@ -77,8 +109,6 @@ export default function DashboardPage() {
   return (
     <>
       <style>{`
-        @import url('https://fonts.googleapis.com/css2?family=DM+Sans:wght@300;400;500;700;800&family=JetBrains+Mono:wght@400;600&display=swap');
-
         * { margin: 0; padding: 0; box-sizing: border-box; }
 
         :root {
@@ -104,22 +134,28 @@ export default function DashboardPage() {
 
         .dash-wrap { min-height: 100vh; background: var(--cream); }
 
-
-
         .dash-body { padding: 36px 32px; max-width: 1100px; margin: 0 auto; }
 
         /* Welcome banner */
         .dash-welcome {
+          visibility: hidden;
           background: linear-gradient(135deg, #fff 0%, var(--warm) 100%);
           border: 1.5px solid var(--border);
           border-radius: 20px; padding: 28px 32px;
           display: flex; align-items: center; justify-content: space-between;
           margin-bottom: 28px;
           box-shadow: 0 2px 16px rgba(232,87,26,0.06);
-          animation: fadeUp 0.5s ease both;
           gap: 16px; flex-wrap: wrap;
+          position: relative;
+          overflow: hidden;
         }
-        @keyframes fadeUp { from{opacity:0;transform:translateY(16px)} to{opacity:1;transform:translateY(0)} }
+        .dash-welcome::before {
+          content: '';
+          position: absolute;
+          top: 0; left: 0; right: 0;
+          height: 3px;
+          background: linear-gradient(90deg, var(--orange), var(--amber), var(--green));
+        }
         .dash-welcome-left h1 { font-size: 1.75rem; font-weight: 800; color: var(--text); }
         .dash-welcome-left h1 span { color: var(--orange); }
         .dash-welcome-left p { font-size: 0.88rem; color: var(--muted); margin-top: 4px; }
@@ -128,8 +164,11 @@ export default function DashboardPage() {
           padding: 6px 14px; border-radius: 100px;
           font-family: 'JetBrains Mono', monospace; font-size: 0.72rem;
           font-weight: 700; letter-spacing: 0.06em;
+          transition: all 0.25s cubic-bezier(0.34,1.56,0.64,1);
         }
-        .dash-role-dot { width: 7px; height: 7px; border-radius: 50%; }
+        .dash-role-badge:hover { transform: scale(1.05); }
+        .dash-role-dot { width: 7px; height: 7px; border-radius: 50%; animation: dash-pulse 2s ease-in-out infinite; }
+        @keyframes dash-pulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.4; } }
 
         /* Stat cards */
         .dash-cards {
@@ -137,25 +176,29 @@ export default function DashboardPage() {
           gap: 18px; margin-bottom: 32px;
         }
         .dash-card {
+          visibility: hidden;
           background: #fff; border: 1.5px solid var(--border);
           border-radius: 16px; padding: 22px;
           box-shadow: 0 2px 8px rgba(0,0,0,0.04);
-          transition: all 0.3s; position: relative; overflow: hidden;
-          animation: fadeUp 0.5s ease both;
+          transition: all 0.35s cubic-bezier(0.34,1.56,0.64,1);
+          position: relative; overflow: hidden;
         }
-        .dash-card:hover { transform: translateY(-4px); box-shadow: 0 10px 32px rgba(0,0,0,0.09); }
+        .dash-card:hover { transform: translateY(-6px); box-shadow: 0 12px 36px rgba(0,0,0,0.1); }
         .dash-card::after {
           content: ''; position: absolute; bottom: 0; left: 0; right: 0; height: 3px;
           background: var(--card-color, var(--orange));
-          opacity: 0; transition: opacity 0.3s;
+          transform: scaleX(0); transform-origin: left;
+          transition: transform 0.4s cubic-bezier(0.34,1.56,0.64,1);
         }
-        .dash-card:hover::after { opacity: 1; }
-        .dash-card-icon { font-size: 1.6rem; margin-bottom: 10px; }
+        .dash-card:hover::after { transform: scaleX(1); }
+        .dash-card-icon { font-size: 1.6rem; margin-bottom: 10px; transition: transform 0.3s; }
+        .dash-card:hover .dash-card-icon { transform: scale(1.15) rotate(-5deg); }
         .dash-card-value { font-size: 2.2rem; font-weight: 800; line-height: 1; }
         .dash-card-label { font-size: 0.83rem; color: var(--muted); margin-top: 6px; }
 
         /* Section title */
         .dash-section-title {
+          visibility: hidden;
           font-size: 1rem; font-weight: 700; color: var(--text);
           margin-bottom: 14px; display: flex; align-items: center; gap: 8px;
         }
@@ -167,20 +210,23 @@ export default function DashboardPage() {
         /* Quick links */
         .dash-quick-links { display: flex; gap: 14px; flex-wrap: wrap; margin-bottom: 32px; }
         .dash-quick-link {
+          visibility: hidden;
           display: flex; align-items: center; gap: 10px; padding: 14px 22px;
           background: #fff; border: 1.5px solid var(--border);
           border-radius: 12px; color: var(--text); text-decoration: none;
-          transition: all 0.25s; font-size: 0.92rem; font-weight: 500;
+          transition: all 0.3s cubic-bezier(0.34,1.56,0.64,1);
+          font-size: 0.92rem; font-weight: 500;
           box-shadow: 0 1px 4px rgba(0,0,0,0.04);
         }
         .dash-quick-link:hover {
           background: var(--warm); border-color: rgba(232,87,26,0.3);
-          color: var(--orange); transform: translateY(-2px);
-          box-shadow: 0 6px 20px rgba(232,87,26,0.1);
+          color: var(--orange); transform: translateY(-3px) scale(1.02);
+          box-shadow: 0 8px 24px rgba(232,87,26,0.12);
         }
 
         /* Table */
         .dash-table-wrap {
+          visibility: hidden;
           background: #fff; border: 1.5px solid var(--border);
           border-radius: 16px; overflow: hidden;
           box-shadow: 0 2px 8px rgba(0,0,0,0.04);
@@ -196,8 +242,11 @@ export default function DashboardPage() {
         .dash-table td {
           padding: 14px 18px; font-size: 0.88rem;
           border-bottom: 1px solid rgba(226,232,240,0.6);
+          transition: background 0.2s;
         }
+        .dash-table tbody tr { transition: all 0.2s; }
         .dash-table tbody tr:hover td { background: var(--warm); }
+        .dash-table tbody tr:hover { transform: scale(1.005); }
         .dash-table tbody tr:last-child td { border-bottom: none; }
 
         .status-badge {
@@ -207,9 +256,9 @@ export default function DashboardPage() {
         }
         .status-badge::before { content:''; width:6px;height:6px;border-radius:50%;flex-shrink:0; }
         .status-active { background: rgba(16,185,129,0.1); color: #059669; }
-        .status-active::before { background: #059669; }
+        .status-active::before { background: #059669; animation: dash-pulse 1.5s infinite; }
         .status-pending { background: rgba(245,158,11,0.1); color: #D97706; }
-        .status-pending::before { background: #D97706; }
+        .status-pending::before { background: #D97706; animation: dash-pulse 1.5s infinite; }
         .status-resolved { background: rgba(100,116,147,0.1); color: var(--muted); }
         .status-resolved::before { background: var(--muted); }
 
@@ -217,15 +266,19 @@ export default function DashboardPage() {
           text-align: center; padding: 48px; color: var(--muted);
           font-size: 0.9rem;
         }
+        .dash-empty-icon { font-size: 2.5rem; margin-bottom: 12px; opacity: 0.5; }
         .dash-error {
           text-align: center; padding: 60px; color: var(--red);
           font-size: 1rem; background: rgba(239,68,68,0.04);
           border-radius: 16px; border: 1.5px solid rgba(239,68,68,0.12);
+          animation: fadeUp 0.5s ease both;
         }
+        @keyframes fadeUp { from{opacity:0;transform:translateY(16px)} to{opacity:1;transform:translateY(0)} }
         .dash-loading {
           text-align: center; padding: 80px;
           display: flex; flex-direction: column; align-items: center; gap: 16px;
           color: var(--muted);
+          animation: fadeUp 0.5s ease both;
         }
         .loading-spinner {
           width: 36px; height: 36px; border-radius: 50%;
@@ -238,8 +291,7 @@ export default function DashboardPage() {
         .mono { font-family: 'JetBrains Mono', monospace; font-size: 0.82rem; color: var(--muted); }
       `}</style>
 
-      <div className="dash-wrap">
-
+      <div className="dash-wrap" ref={containerRef}>
 
         <div className="dash-body">
           {loading ? (
@@ -279,17 +331,17 @@ export default function DashboardPage() {
               <div className="dash-cards">
                 <div className="dash-card" style={{ ["--card-color" as string]: "var(--orange)" }}>
                   <div className="dash-card-icon">🚨</div>
-                  <div className="dash-card-value" style={{ color: "var(--orange)" }}>{activeSessions.length}</div>
+                  <div className="dash-card-value gh-counter" style={{ color: "var(--orange)" }}>{activeSessions.length}</div>
                   <div className="dash-card-label">Active Sessions</div>
                 </div>
                 <div className="dash-card" style={{ ["--card-color" as string]: "var(--blue)" }}>
                   <div className="dash-card-icon">📋</div>
-                  <div className="dash-card-value" style={{ color: "var(--blue)" }}>{sessions.length}</div>
+                  <div className="dash-card-value gh-counter" style={{ color: "var(--blue)" }}>{sessions.length}</div>
                   <div className="dash-card-label">Total Sessions</div>
                 </div>
                 <div className="dash-card" style={{ ["--card-color" as string]: "var(--green)" }}>
                   <div className="dash-card-icon">✅</div>
-                  <div className="dash-card-value" style={{ color: "var(--green)" }}>
+                  <div className="dash-card-value gh-counter" style={{ color: "var(--green)" }}>
                     {sessions.filter((s) => s.status === "resolved").length}
                   </div>
                   <div className="dash-card-label">Resolved</div>
@@ -315,7 +367,10 @@ export default function DashboardPage() {
               <div className="dash-section-title">Emergency Sessions</div>
               {sessions.length === 0 ? (
                 <div className="dash-table-wrap">
-                  <div className="dash-empty">No emergency sessions yet.</div>
+                  <div className="dash-empty">
+                    <div className="dash-empty-icon">📭</div>
+                    No emergency sessions yet.
+                  </div>
                 </div>
               ) : (
                 <div className="dash-table-wrap">

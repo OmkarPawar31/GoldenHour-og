@@ -1,9 +1,11 @@
 "use client";
 
-import { useState, useEffect, Suspense } from "react";
+import { useState, useEffect, Suspense, useRef } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import Link from "next/link";
 import { saveAuth } from "../../utils/auth";
+import gsap from "gsap";
+import { useGSAP } from "@gsap/react";
 
 type Role = "ambulance" | "hospital" | "admin" | "operator" | null;
 
@@ -67,6 +69,20 @@ function AuthContent() {
             setSelectedRole("admin");
         }
     }, [searchParams, router]);
+
+    const containerRef = useRef<HTMLDivElement>(null);
+    useGSAP(() => {
+        if (!mounted) return;
+        const tl = gsap.timeline({ defaults: { ease: "power3.out" } });
+        tl.fromTo(".left-panel > *",
+            { y: 20, autoAlpha: 0 },
+            { y: 0, autoAlpha: 1, duration: 0.8, stagger: 0.1, delay: 0.1 }
+        ).fromTo(".form-box",
+            { x: 40, autoAlpha: 0 },
+            { x: 0, autoAlpha: 1, duration: 0.8 },
+            "-=0.6"
+        );
+    }, { dependencies: [mounted], scope: containerRef });
 
 
 
@@ -153,7 +169,7 @@ function AuthContent() {
     return (
         <>
             <style>{`
-        @import url('https://fonts.googleapis.com/css2?family=Bebas+Neue&family=DM+Sans:ital,opsz,wght@0,9..40,300;0,9..40,400;0,9..40,500;0,9..40,700&family=JetBrains+Mono:wght@400;600&display=swap');
+        /* Fonts moved to layout.tsx */
 
         *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
 
@@ -214,6 +230,7 @@ function AuthContent() {
           background: linear-gradient(160deg, #fff 0%, var(--warm) 100%);
           border-right: 1px solid var(--border);
         }
+        .left-panel > * { visibility: hidden; }
         @media(min-width:1024px){ .left-panel { display: flex; } }
 
         /* Skyline */
@@ -429,14 +446,10 @@ function AuthContent() {
         .opt-tag { opacity:0.45;font-weight:400; }
 
         /* Form enter animation */
-        .form-box { animation: fadeUp 0.6s ease both; }
-        @keyframes fadeUp {
-          from { opacity: 0; transform: translateY(20px); }
-          to   { opacity: 1; transform: translateY(0); }
-        }
+        .form-box { visibility: hidden; }
       `}</style>
 
-            <div className="auth-layout">
+            <div className="auth-layout" ref={containerRef}>
                 {/* Orbs */}
                 <div className="orb orb-1" />
                 <div className="orb orb-2" />

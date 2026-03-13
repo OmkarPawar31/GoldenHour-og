@@ -2,6 +2,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { Flag, Ambulance, Check } from "lucide-react";
 
 interface LiveTrackerProps {
   isEmergencyActive: boolean;
@@ -95,7 +96,7 @@ export default function LiveTracker({
         <div className="absolute inset-0 bg-gradient-to-t from-emerald-500/5 to-transparent pointer-events-none" />
 
         <div className="w-20 h-20 bg-gradient-to-br from-emerald-500/30 to-emerald-400/10 rounded-full flex items-center justify-center mb-5 ring-4 ring-emerald-500/20 shadow-[0_0_40px_rgba(16,185,129,0.3)] relative z-10">
-          <span className="text-4xl">🏁</span>
+          <Flag size={36} className="text-emerald-500" />
         </div>
         <h2 className="text-2xl font-bold text-emerald-400 font-mono tracking-widest uppercase text-center mb-2 relative z-10">
           Destination Reached
@@ -129,7 +130,7 @@ export default function LiveTracker({
       <div className="flex items-center justify-between border-b border-gray-800/80 pb-4 mb-4 relative">
         <div className="absolute bottom-0 left-0 right-0 h-[1px] bg-gradient-to-r from-transparent via-blue-500/30 to-transparent" />
         <h3 className="font-mono font-bold text-gray-200 tracking-wider flex items-center gap-3">
-          <span className="text-xl">🚑</span>
+          <Ambulance size={20} className="text-gray-200" />
           <span className="uppercase text-sm">Green Corridor System</span>
         </h3>
 
@@ -227,7 +228,7 @@ export default function LiveTracker({
                     : 'bg-gray-800/80 text-gray-400 hover:bg-gray-700/80 border border-gray-700/50 hover:border-gray-600/50'}
                 `}
               >
-                {s} km/h {speedKmh === s && "✓"}
+                {s} km/h {speedKmh === s && <Check size={12} className="inline ml-1" />}
               </button>
             ))}
           </div>

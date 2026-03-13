@@ -14,11 +14,11 @@ interface HospitalCardProps {
 // Derive a hospital type badge from name heuristics
 function getHospitalType(name: string): { label: string; color: string } {
   const n = name.toLowerCase();
-  if (n.includes("trauma") || n.includes("emergency")) return { label: "Trauma Center", color: "text-red-400 bg-red-500/10 border-red-500/20" };
-  if (n.includes("multi") || n.includes("super")) return { label: "Multi-Specialty", color: "text-blue-400 bg-blue-500/10 border-blue-500/20" };
-  if (n.includes("children") || n.includes("child") || n.includes("pediatric")) return { label: "Pediatric", color: "text-amber-400 bg-amber-500/10 border-amber-500/20" };
-  if (n.includes("heart") || n.includes("cardiac")) return { label: "Cardiac Care", color: "text-pink-400 bg-pink-500/10 border-pink-500/20" };
-  return { label: "General Hospital", color: "text-cyan-400 bg-cyan-500/10 border-cyan-500/20" };
+  if (n.includes("trauma") || n.includes("emergency")) return { label: "Trauma Ctr", color: "text-red-500 bg-red-50 border-red-200" };
+  if (n.includes("multi") || n.includes("super")) return { label: "Multi-Specialty", color: "text-blue-600 bg-blue-50 border-blue-200" };
+  if (n.includes("children") || n.includes("child") || n.includes("pediatric")) return { label: "Pediatric", color: "text-amber-600 bg-amber-50 border-amber-200" };
+  if (n.includes("heart") || n.includes("cardiac")) return { label: "Cardiac", color: "text-pink-600 bg-pink-50 border-pink-200" };
+  return { label: "General", color: "text-sky-600 bg-sky-50 border-sky-200" };
 }
 
 // Stable pseudo-random number from a string seed (hospital id)
@@ -49,12 +49,12 @@ export default function HospitalCard({ hospital, isNearest, isSelected, onSelect
   return (
     <div
       onClick={() => !isSelected && onSelect(hospital)}
-      className={`relative p-5 rounded-2xl border flex flex-col gap-2.5 transition-all duration-500 cursor-pointer group overflow-hidden ${
+      className={`relative p-4 rounded-2xl border flex flex-col gap-2 transition-all duration-500 cursor-pointer group overflow-hidden ${
         isSelected
-          ? "bg-[#1e3a8a]/20 border-blue-500/50 shadow-[0_8px_30px_rgba(37,99,235,0.25)] scale-[1.02]"
+          ? "bg-blue-50/40 border-blue-400 shadow-md scale-[1.01]"
           : isNearest
-            ? "bg-[#0da64f]/10 border-[#0da64f]/40 shadow-[0_8px_30px_rgba(13,166,79,0.1)] hover:border-[#0da64f]/60 hover:-translate-y-1"
-            : "bg-white/[0.02] border-white/[0.05] hover:bg-white/[0.04] hover:border-white/[0.15] hover:-translate-y-1 hover:shadow-xl"
+            ? "bg-emerald-50/50 border-emerald-400/50 shadow-sm hover:border-emerald-500/60 hover:-translate-y-0.5"
+            : "bg-white border-slate-200 hover:border-slate-300 hover:-translate-y-0.5 hover:shadow-md"
       }`}
     >
       {/* Shimmer on hover */}
@@ -77,24 +77,24 @@ export default function HospitalCard({ hospital, isNearest, isSelected, onSelect
       {/* Top badges row */}
       <div className="flex items-center gap-2 pl-1 flex-wrap">
         {isNearest && (
-          <div className="flex items-center gap-1.5">
-            <div className="w-1.5 h-1.5 rounded-full bg-[#0da64f] animate-pulse shadow-[0_0_8px_#0da64f]" />
-            <span className="text-[#0da64f] text-[9px] uppercase font-bold tracking-[0.2em]">
+          <div className="flex items-center gap-1 shrink-0">
+            <div className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse shadow-[0_0_8px_#10B981]" />
+            <span className="text-emerald-700 text-[10px] uppercase font-bold tracking-[0.1em]">
               Nearest
             </span>
           </div>
         )}
         {/* Hospital type badge */}
-        <span className={`text-[9px] uppercase font-semibold tracking-wider px-2 py-0.5 rounded-full border ${hospitalType.color}`}>
+        <span className={`text-[9px] uppercase font-bold tracking-widest px-2 py-0.5 rounded-full border shrink-0 ${hospitalType.color}`}>
           {hospitalType.label}
         </span>
         {/* 24/7 indicator */}
-        <span className="text-[9px] uppercase font-semibold tracking-wider px-2 py-0.5 rounded-full border text-emerald-400 bg-emerald-500/10 border-emerald-500/20 flex items-center gap-1">
-          <span className="w-1 h-1 rounded-full bg-emerald-400 animate-pulse" />
+        <span className="text-[9px] uppercase font-bold tracking-widest px-2 py-0.5 rounded-full border text-emerald-600 bg-emerald-50 border-emerald-200 flex items-center gap-1 shrink-0">
+          <span className="w-1 h-1 rounded-full bg-emerald-500 animate-pulse" />
           24/7
         </span>
         {/* Bed count badge */}
-        <span className="text-[9px] uppercase font-semibold tracking-wider px-2 py-0.5 rounded-full border text-sky-400 bg-sky-500/10 border-sky-500/20 flex items-center gap-1 ml-auto">
+        <span className="text-[9px] uppercase font-bold tracking-widest px-2 py-0.5 rounded-full border text-sky-600 bg-sky-50 border-sky-200 flex items-center gap-1 ml-auto shrink-0">
           <svg className="w-3 h-3" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2}>
             <path d="M2 4v16" strokeLinecap="round" />
             <path d="M2 8h18a2 2 0 012 2v10" strokeLinecap="round" />
@@ -106,16 +106,16 @@ export default function HospitalCard({ hospital, isNearest, isSelected, onSelect
       </div>
 
       {/* Hospital name + distance */}
-      <div className="flex justify-between items-start pl-1 gap-2 mt-1">
-        <h3 className={`font-bold leading-tight text-[15px] truncate flex-1 ${isSelected ? "text-white" : "text-gray-200 group-hover:text-white transition-colors"}`}>
+      <div className="flex justify-between items-start pl-1 gap-3 mt-1 min-w-0">
+        <h3 className={`font-bold leading-tight text-[15px] truncate flex-1 min-w-0 ${isSelected ? "text-slate-900" : "text-slate-800 group-hover:text-blue-600 transition-colors"}`}>
           {hospital.name}
         </h3>
         <span className={`text-[11px] font-bold tracking-wider py-1.5 px-3 rounded-full shrink-0 transition-all duration-300 ${
           isSelected 
-            ? "bg-blue-500 text-white shadow-[0_0_15px_rgba(59,130,246,0.5)]" 
+            ? "bg-blue-500 text-white shadow-[0_0_15px_rgba(59,130,246,0.3)]" 
             : isNearest
-              ? "bg-[#0da64f]/20 text-[#0da64f]"
-              : "bg-white/5 text-gray-400 group-hover:bg-white/10 group-hover:text-gray-200"
+              ? "bg-emerald-100/80 text-emerald-700"
+              : "bg-slate-100 text-slate-500 group-hover:bg-slate-200 group-hover:text-slate-700"
         }`}>
           {distanceKm} km
         </span>
@@ -128,24 +128,23 @@ export default function HospitalCard({ hospital, isNearest, isSelected, onSelect
       <div className="mt-2 pl-1 flex flex-col gap-2.5">
         {/* Stable availability bar — no more Math.random() flickering */}
         <div className="flex items-center gap-2">
-          <span className="text-[9px] text-gray-500 uppercase tracking-widest font-medium">Availability</span>
-          <div className="flex-1 h-1 bg-white/[0.04] rounded-full overflow-hidden">
+          <span className="text-[9px] text-slate-500 uppercase tracking-widest font-bold shrink-0">Capacity</span>
+          <div className="flex-1 h-1.5 bg-slate-100 rounded-full overflow-hidden">
             <div
-              className="h-full rounded-full bg-gradient-to-r from-emerald-500 to-emerald-400 transition-all duration-700"
+              className={`h-full rounded-full transition-all duration-700 ${availability > 80 ? 'bg-emerald-500' : availability > 50 ? 'bg-amber-400' : 'bg-red-500'}`}
               style={{
                 width: `${availability}%`,
-                boxShadow: "0 0 6px rgba(16,185,129,0.4)",
               }}
             />
           </div>
-          <span className="text-[9px] text-emerald-400/60 font-mono">{availability}%</span>
+          <span className={`text-[10px] font-bold font-mono tracking-tighter shrink-0 ${availability > 80 ? 'text-emerald-600' : availability > 50 ? 'text-amber-500' : 'text-red-500'}`}>{availability}%</span>
         </div>
 
         {/* Action button */}
         {!isSelected ? (
           <button
             onClick={(e) => { e.stopPropagation(); onSelect(hospital); }}
-            className="w-full py-2.5 bg-white/[0.03] hover:bg-white/[0.08] text-gray-300 hover:text-white border border-white/[0.05] hover:border-white/[0.2] rounded-xl font-bold text-[11px] tracking-[0.15em] uppercase transition-all duration-300 backdrop-blur-md"
+            className="w-full py-2.5 bg-slate-100 hover:bg-slate-200 text-slate-600 hover:text-slate-900 border border-slate-200 hover:border-slate-300 rounded-xl font-bold text-[11px] tracking-[0.15em] uppercase transition-all duration-300 backdrop-blur-md"
           >
             Select Destination
           </button>

@@ -3,6 +3,8 @@
 
 import { useEffect, useRef, useState, useCallback } from "react";
 import { TrackedAmbulance } from "../hooks/useOperatorTracking";
+import { renderToString } from "react-dom/server";
+import { Ambulance, Building2, Radio } from "lucide-react";
 
 const MAPS_API_KEY = process.env.NEXT_PUBLIC_GOOGLE_MAPS_API_KEY || "";
 const DEFAULT_CENTER = { lat: 18.5204, lng: 73.8567 };
@@ -91,10 +93,15 @@ export default function AdminLiveMap({ ambulances }: AdminLiveMapProps) {
             }
         }
 
-        const createEmojiIcon = (emoji: string, size = 36) => {
-            return 'data:image/svg+xml;charset=UTF-8,' + encodeURIComponent(
-                `<svg xmlns="http://www.w3.org/2000/svg" width="${size}" height="${size}"><text x="50%" y="50%" dominant-baseline="central" text-anchor="middle" font-size="${size - 8}">${emoji}</text></svg>`
-            );
+        const createLucideIconUrl = (Icon: React.ElementType, color: string, size = 36) => {
+            const svgBase = renderToString(<Icon size={size - 8} color={color} strokeWidth={2.5} />);
+            const fullSvg = `<svg xmlns="http://www.w3.org/2000/svg" width="${size}" height="${size}" viewBox="0 0 ${size} ${size}">
+                <circle cx="${size/2}" cy="${size/2}" r="${size/2 - 1}" fill="white" stroke="${color}" stroke-width="2"/>
+                <g transform="translate(4, 4)">
+                    ${svgBase.replace(/<svg[^>]*>|<\/svg>/gi, '')}
+                </g>
+            </svg>`;
+            return 'data:image/svg+xml;charset=UTF-8,' + encodeURIComponent(fullSvg);
         };
 
         let bounds = new window.google.maps.LatLngBounds();
@@ -112,7 +119,7 @@ export default function AdminLiveMap({ ambulances }: AdminLiveMapProps) {
                     position: pos,
                     map,
                     icon: {
-                        url: createEmojiIcon("🚑", 32),
+                        url: createLucideIconUrl(Ambulance, "#EF4444", 32),
                         scaledSize: new window.google.maps.Size(32, 32),
                         anchor: new window.google.maps.Point(16, 16),
                     },
@@ -151,7 +158,7 @@ export default function AdminLiveMap({ ambulances }: AdminLiveMapProps) {
                         position: destPos,
                         map,
                         icon: {
-                            url: createEmojiIcon("🏥", 28),
+                            url: createLucideIconUrl(Building2, "#3B82F6", 28),
                             scaledSize: new window.google.maps.Size(28, 28),
                             anchor: new window.google.maps.Point(14, 14),
                         },
@@ -188,7 +195,7 @@ export default function AdminLiveMap({ ambulances }: AdminLiveMapProps) {
             {ambulances.length === 0 && (
                  <div style={{ position: 'absolute', inset: 0, background: 'rgba(241, 245, 249, 0.4)', backdropFilter: 'blur(2px)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 5 }}>
                  <div style={{ background: '#fff', padding: '24px 32px', borderRadius: '16px', boxShadow: '0 10px 40px rgba(0,0,0,0.08)', textAlign: 'center' }}>
-                     <div style={{ fontSize: '2rem', marginBottom: '8px' }}>📡</div>
+                     <div style={{ marginBottom: '8px', display: 'flex', justifyContent: 'center' }}><Radio size={32} color="#64748B" /></div>
                      <div style={{ fontWeight: 800, color: '#1E293B', fontSize: '1.1rem' }}>No Active En-Route Ambulances</div>
                      <div style={{ fontSize: '0.85rem', color: '#64748B', marginTop: '4px' }}>Units will appear here once an emergency is initiated.</div>
                  </div>

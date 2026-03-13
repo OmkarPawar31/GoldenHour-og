@@ -5,6 +5,7 @@ import { useEffect, useRef, useState } from "react";
 import { GoogleMap, Marker, Polyline, OverlayView, DirectionsRenderer } from "@react-google-maps/api";
 import { Location, Hospital, RouteInfo } from "../types";
 import { DummyCar } from "../hooks/useAmbulanceSimulation";
+import { User, Car, Ambulance, Building2, AlertTriangle, Clock, MapPin } from "lucide-react";
 
 export interface TrafficSignal {
   id: string;
@@ -331,7 +332,7 @@ export default function MapView({
               <div className="absolute inset-[-6px] border border-emerald-400/50 rounded-full animate-pulse pointer-events-none" />
               {/* Patient icon */}
               <div className="w-9 h-9 bg-emerald-600 rounded-full border-[3px] border-white flex items-center justify-center shadow-[0_0_15px_rgba(16,185,129,0.6)]">
-                <span className="text-white text-sm">🧑</span>
+                <User size={16} className="text-white" />
               </div>
               {/* Label */}
               <div className="absolute top-full left-1/2 -translate-x-1/2 mt-1 px-2 py-0.5 bg-emerald-700/90 text-white text-[10px] font-mono rounded whitespace-nowrap backdrop-blur-sm border border-emerald-500/30">
@@ -352,7 +353,7 @@ export default function MapView({
               <div className="absolute inset-[-6px] border border-blue-400/50 rounded-full animate-pulse pointer-events-none" />
               {/* Car icon */}
               <div className="w-9 h-9 bg-blue-600 rounded-full border-[3px] border-white flex items-center justify-center shadow-[0_0_15px_rgba(59,130,246,0.6)]">
-                <span className="text-white text-sm">🚗</span>
+                <Car size={16} className="text-white" />
               </div>
               {/* Label */}
               <div className="absolute top-full left-1/2 -translate-x-1/2 mt-1 px-2 py-0.5 bg-blue-700/90 text-white text-[10px] font-mono rounded whitespace-nowrap backdrop-blur-sm border border-blue-500/30">
@@ -376,7 +377,7 @@ export default function MapView({
               {/* Depot icon */}
               <div className="w-10 h-10 bg-gradient-to-br from-blue-600 to-blue-800 rounded-lg border-[2px] border-white/80 flex items-center justify-center shadow-[0_0_15px_rgba(37,99,235,0.5)] rotate-45">
                 <div className="-rotate-45">
-                  <span className="text-white text-lg">🚑</span>
+                  <Ambulance size={20} className="text-white" />
                 </div>
               </div>
               {/* Label */}
@@ -396,7 +397,7 @@ export default function MapView({
           >
             <div className="absolute top-0 left-0 -translate-x-1/2 -translate-y-1/2 z-[70] drop-shadow-md opacity-80 hover:opacity-100 transition-opacity cursor-pointer">
               <div className="w-8 h-8 bg-white rounded-full border-[2px] border-amber-500 flex items-center justify-center shadow-[0_0_10px_rgba(245,158,11,0.3)]">
-                <span className="text-amber-500 text-sm">🚑</span>
+                <Ambulance size={16} className="text-amber-500" />
               </div>
               <div className="absolute top-full left-1/2 -translate-x-1/2 mt-1 px-1.5 py-0.5 bg-amber-900/80 text-amber-100 text-[9px] font-mono rounded whitespace-nowrap border border-amber-500/30">
                 {amb.id}
@@ -586,18 +587,18 @@ export default function MapView({
               {/* Car icon */}
               <div className={`w-10 h-10 rounded-full flex items-center justify-center transition-all duration-500 ${
                 car.alerted
-                  ? 'bg-red-600 border-[3px] border-white shadow-[0_0_20px_rgba(239,68,68,0.7)]'
-                  : 'bg-amber-500 border-[3px] border-white shadow-[0_0_12px_rgba(245,158,11,0.5)]'
+                  ? 'bg-red-600 border-[3px] border-white shadow-[0_0_20px_rgba(239,68,68,0.7)] text-white'
+                  : 'bg-amber-500 border-[3px] border-white shadow-[0_0_12px_rgba(245,158,11,0.5)] text-white'
               }`}>
-                <span className="text-lg">🚗</span>
+                <Car size={18} />
               </div>
               {/* Label */}
-              <div className={`absolute top-full left-1/2 -translate-x-1/2 mt-1 px-2 py-0.5 text-[10px] font-mono rounded whitespace-nowrap backdrop-blur-sm border ${
+              <div className={`absolute top-full left-1/2 -translate-x-1/2 mt-1 px-2 py-0.5 text-[10px] font-mono rounded whitespace-nowrap flex items-center gap-1 backdrop-blur-sm border ${
                 car.alerted
                   ? 'bg-red-700/90 text-white border-red-500/50'
                   : 'bg-amber-700/90 text-amber-100 border-amber-500/30'
               }`}>
-                {car.alerted ? '⚠️ MOVE ASIDE' : 'VEHICLE'}
+                {car.alerted ? <><AlertTriangle size={10} /> MOVE ASIDE</> : 'VEHICLE'}
               </div>
             </div>
           </OverlayView>
@@ -623,27 +624,27 @@ export default function MapView({
             {/* Route flow indicator */}
             <div className="flex items-center gap-1.5 mb-2 px-1">
               <div className={`w-5 h-5 rounded flex items-center justify-center text-xs ${currentLeg === 'depot-to-patient'
-                  ? 'bg-blue-500/30 border border-blue-400/50'
-                  : 'bg-blue-500/10 border border-blue-400/20'
-                }`}>🚑</div>
+                  ? 'bg-blue-500/30 text-blue-200 border border-blue-400/50'
+                  : 'bg-blue-500/10 text-blue-300 border border-blue-400/20'
+                }`}><Ambulance size={12} /></div>
               <div className={`flex-1 h-[2px] ${currentLeg === 'depot-to-patient'
                   ? 'bg-gradient-to-r from-blue-500 to-blue-300 animate-pulse'
                   : 'bg-blue-500/20'
                 }`} />
               <div className={`w-5 h-5 rounded flex items-center justify-center text-xs ${currentLeg === 'depot-to-patient'
-                  ? 'bg-emerald-500/30 border border-emerald-400/50 animate-pulse'
+                  ? 'bg-emerald-500/30 text-emerald-200 border border-emerald-400/50 animate-pulse'
                   : currentLeg === 'patient-to-hospital'
-                    ? 'bg-emerald-500/30 border border-emerald-400/50'
-                    : 'bg-emerald-500/10 border border-emerald-400/20'
-                }`}>🧑</div>
+                    ? 'bg-emerald-500/30 text-emerald-200 border border-emerald-400/50'
+                    : 'bg-emerald-500/10 text-emerald-300 border border-emerald-400/20'
+                }`}><User size={12} /></div>
               <div className={`flex-1 h-[2px] ${currentLeg === 'patient-to-hospital'
                   ? 'bg-gradient-to-r from-emerald-500 to-red-400 animate-pulse'
                   : 'bg-gray-600/30'
                 }`} />
               <div className={`w-5 h-5 rounded flex items-center justify-center text-xs ${currentLeg === 'patient-to-hospital'
-                  ? 'bg-red-500/30 border border-red-400/50 animate-pulse'
-                  : 'bg-red-500/10 border border-red-400/20'
-                }`}>🏥</div>
+                  ? 'bg-red-500/30 text-red-200 border border-red-400/50 animate-pulse'
+                  : 'bg-red-500/10 text-red-300 border border-red-400/20'
+                }`}><Building2 size={12} /></div>
             </div>
 
             {/* Destination name */}
@@ -654,7 +655,7 @@ export default function MapView({
             <div className="flex items-center gap-4 mt-2 pt-2 border-t border-white/[0.06]">
               {etaMinutes !== undefined && (
                 <div className="flex items-center gap-1.5">
-                  <span className="text-amber-400 text-[10px]">⏱</span>
+                  <Clock size={12} className="text-amber-400" />
                   <span className="text-amber-400 font-mono text-xs font-semibold">
                     {formatTime(etaMinutes)}
                   </span>
@@ -662,7 +663,7 @@ export default function MapView({
               )}
               {remainingDistanceM !== undefined && (
                 <div className="flex items-center gap-1.5">
-                  <span className="text-blue-400 text-[10px]">📍</span>
+                  <MapPin size={12} className="text-blue-400" />
                   <span className="text-blue-400 font-mono text-xs font-semibold">
                     {formatDist(remainingDistanceM)}
                   </span>

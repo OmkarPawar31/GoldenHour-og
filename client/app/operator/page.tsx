@@ -1,11 +1,15 @@
 "use client";
 
 import { useState, useEffect, useRef, useCallback } from "react";
+import gsap from "gsap";
+import { useGSAP } from "@gsap/react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useOperatorTracking, TrackedAmbulance } from "../../hooks/useOperatorTracking";
 import { clearAuth } from "../../utils/auth"; // Added import for clearAuth
 import { EMERGENCY_PRIORITIES, PriorityLevel, getPriorityByValue } from "../../utils/priorityUtils";
+import { renderToString } from 'react-dom/server';
+import { Ambulance, Building2, User, CarFront } from "lucide-react";
 
 // --- Constants ---
 const MAPS_API_KEY = process.env.NEXT_PUBLIC_GOOGLE_MAPS_API_KEY || "";
@@ -58,6 +62,17 @@ export default function OperatorDashboard() {
     const [toast, setToast] = useState<{ msg: string; type: "success" | "error" } | null>(null);
     const [emergencyPriority, setEmergencyPriority] = useState<PriorityLevel>("high");
     const [selectedSubCategory, setSelectedSubCategory] = useState<string | null>(null);
+    const pageRef = useRef<HTMLDivElement>(null);
+
+    // GSAP entrance
+    useGSAP(() => {
+        if (!isLoggedIn || !pageRef.current) return;
+        const tl = gsap.timeline({ defaults: { ease: 'power3.out' } });
+        tl.fromTo('.op-header',  { y: -20, autoAlpha: 0 }, { y: 0, autoAlpha: 1, duration: 0.5 })
+          .fromTo('.op-sidebar', { x: 30,  autoAlpha: 0 }, { x: 0, autoAlpha: 1, duration: 0.6 }, '-=0.3')
+          .fromTo('.op-map',     { x: -20, autoAlpha: 0 }, { x: 0, autoAlpha: 1, duration: 0.5 }, '-=0.5');
+    }, { scope: pageRef, dependencies: [isLoggedIn] });
+
 
     // ─── Demo Mode State ───
     const [isDemoMode, setIsDemoMode] = useState(false);
@@ -145,10 +160,9 @@ export default function OperatorDashboard() {
         const data = tracking.trackedData;
         const map = mapObj.current;
 
-        const createEmojiIcon = (emoji: string, size = 36) => {
-            return 'data:image/svg+xml;charset=UTF-8,' + encodeURIComponent(
-                `<svg xmlns="http://www.w3.org/2000/svg" width="${size}" height="${size}"><text x="50%" y="50%" dominant-baseline="central" text-anchor="middle" font-size="${size - 8}">${emoji}</text></svg>`
-            );
+        const createLucideIconUrl = (IconComponent: any, size = 36, color = 'currentColor', fill = 'none') => {
+            const svgString = renderToString(<IconComponent size={size} color={color} fill={fill} />);
+            return 'data:image/svg+xml;charset=UTF-8,' + encodeURIComponent(svgString);
         };
 
         // Ambulance marker
@@ -157,7 +171,7 @@ export default function OperatorDashboard() {
                 position: { lat: data.lat, lng: data.lng },
                 map,
                 icon: {
-                    url: createEmojiIcon("🚑", 40),
+                    url: createLucideIconUrl(Ambulance, 40, '#f97316'), // orange-500
                     scaledSize: new window.google.maps.Size(40, 40),
                     anchor: new window.google.maps.Point(20, 20),
                 },
@@ -212,7 +226,7 @@ export default function OperatorDashboard() {
                     position: { lat: data.destination.lat, lng: data.destination.lng },
                     map,
                     icon: {
-                        url: createEmojiIcon("🏥", 36),
+                        url: createLucideIconUrl(Building2, 36, '#ef4444'), // red-500
                         scaledSize: new window.google.maps.Size(36, 36),
                         anchor: new window.google.maps.Point(18, 18),
                     },
@@ -398,16 +412,9 @@ export default function OperatorDashboard() {
         demoMarkersRef.current = [];
 
         // Create markers for demo ambulances
-        const createEmojiIcon = (emoji: string, size = 40) => {
-            const canvas = document.createElement("canvas");
-            canvas.width = size;
-            canvas.height = size;
-            const ctx = canvas.getContext("2d")!;
-            ctx.font = `${size * 0.8}px Arial`;
-            ctx.textAlign = "center";
-            ctx.textBaseline = "middle";
-            ctx.fillText(emoji, size / 2, size / 2);
-            return canvas.toDataURL();
+        const createLucideIconUrlDemo = (IconComponent: any, size = 40, color = 'currentColor', fill = 'none') => {
+            const svgString = renderToString(<IconComponent size={size} color={color} fill={fill} />);
+            return 'data:image/svg+xml;charset=UTF-8,' + encodeURIComponent(svgString);
         };
 
         demoAmbulances.forEach(amb => {
@@ -415,7 +422,7 @@ export default function OperatorDashboard() {
                 position: { lat: amb.lat, lng: amb.lng },
                 map: mapObj.current,
                 icon: {
-                    url: createEmojiIcon("🚑"),
+                    url: createLucideIconUrlDemo(Ambulance, 40, '#f97316'),
                     scaledSize: new window.google.maps.Size(40, 40),
                     anchor: new window.google.maps.Point(20, 20),
                 },
@@ -566,14 +573,15 @@ export default function OperatorDashboard() {
         setAmbulances(newAmbs);
 
         if (mapObj.current && window.google) {
-            const createEmojiIcon = (emoji: string) => {
-                return 'data:image/svg+xml;charset=UTF-8,' + encodeURIComponent(`<svg xmlns="http://www.w3.org/2000/svg" width="32" height="32"><text x="50%" y="50%" dominant-baseline="central" text-anchor="middle" font-size="24">${emoji}</text></svg>`);
+            const createLucideIconUrlSearch = (IconComponent: any, color = 'currentColor') => {
+                const svgString = renderToString(<IconComponent size={32} color={color} />);
+                return 'data:image/svg+xml;charset=UTF-8,' + encodeURIComponent(svgString);
             };
 
             const searchMarker = new window.google.maps.Marker({
                 position: center,
                 map: mapObj.current,
-                icon: createEmojiIcon("👤"),
+                icon: createLucideIconUrlSearch(User, '#d1d5db'),
                 title: "Patient Location"
             });
             markersRef.current.push(searchMarker);
@@ -582,7 +590,7 @@ export default function OperatorDashboard() {
                 const mk = new window.google.maps.Marker({
                     position: { lat: h.lat, lng: h.lng },
                     map: mapObj.current,
-                    icon: createEmojiIcon("🏥"),
+                    icon: createLucideIconUrlSearch(Building2, '#ef4444'),
                     title: h.name
                 });
                 markersRef.current.push(mk);
@@ -593,7 +601,7 @@ export default function OperatorDashboard() {
                 const mk = new window.google.maps.Marker({
                     position: { lat: a.lat, lng: a.lng },
                     map: mapObj.current,
-                    icon: createEmojiIcon(isAvailable ? "🚑" : "🚐"),
+                    icon: createLucideIconUrlSearch(isAvailable ? Ambulance : CarFront, isAvailable ? '#10b981' : '#f59e0b'),
                     title: a.id
                 });
 
@@ -875,9 +883,9 @@ export default function OperatorDashboard() {
     }
 
     return (
-        <div style={{ height: '100vh', display: 'flex', backgroundColor: '#FFFBF5', color: '#1E293B', fontFamily: "'DM Sans', sans-serif", overflow: 'hidden' }}>
+        <div ref={pageRef} style={{ height: '100vh', display: 'flex', backgroundColor: '#FFFBF5', color: '#1E293B', fontFamily: "'DM Sans', sans-serif", overflow: 'hidden' }}>
             <style>{`
-                @import url('https://fonts.googleapis.com/css2?family=Bebas+Neue&family=DM+Sans:ital,wght@0,400;0,500;0,700;1,400&family=JetBrains+Mono:wght@400;600&display=swap');
+                /* Fonts moved to layout.tsx */
                 
                 ::-webkit-scrollbar { width: 6px; }
                 ::-webkit-scrollbar-track { background: transparent; }
@@ -931,9 +939,9 @@ export default function OperatorDashboard() {
             `}</style>
 
             {/* Main Content Area */}
-            <main style={{ flex: 1, display: 'flex', flexDirection: 'column', height: '100%' }}>
+            <main className="op-map" style={{ flex: 1, display: 'flex', flexDirection: 'column', height: '100%' }}>
                 {/* Header */}
-                <header style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '1rem 2rem', background: '#FFFFFF', borderBottom: '1px solid #E2E8F0', boxShadow: '0 2px 10px rgba(0,0,0,0.02)', zIndex: 10 }}>
+                <header className="op-header" style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '1rem 2rem', background: '#FFFFFF', borderBottom: '1px solid #E2E8F0', boxShadow: '0 2px 10px rgba(0,0,0,0.02)', zIndex: 10 }}>
                     <div>
                         <h1 style={{ fontFamily: "'Bebas Neue', cursive", fontSize: '1.8rem', letterSpacing: '0.05em', color: '#1E293B', margin: 0 }}>
                             {loginName} <span style={{ color: '#E8571A' }}>• Control Room</span>
@@ -1098,7 +1106,7 @@ export default function OperatorDashboard() {
                     </div>
 
                     {/* Right Sidebar */}
-                    <aside className="slide-in-right" style={{ width: '420px', background: '#FFFFFF', borderLeft: '1px solid #E2E8F0', display: 'flex', flexDirection: 'column', flexShrink: 0, boxShadow: '-5px 0 20px rgba(0,0,0,0.02)', zIndex: 10 }}>
+                    <aside className="op-sidebar" style={{ width: '420px', background: '#FFFFFF', borderLeft: '1px solid #E2E8F0', display: 'flex', flexDirection: 'column', flexShrink: 0, boxShadow: '-5px 0 20px rgba(0,0,0,0.02)', zIndex: 10 }}>
 
                         {/* ─── Tab Bar: Search Results vs Live Tracking ─── */}
                         <div style={{ display: 'flex', borderBottom: '1.5px solid #E2E8F0' }}>
@@ -1335,8 +1343,8 @@ export default function OperatorDashboard() {
 
                 {/* Assignment Modal */}
                 {selectedAmbulance && (
-                    <div className="fade-up" style={{ position: 'fixed', inset: 0, zIndex: 100, display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'rgba(15, 23, 42, 0.4)', backdropFilter: 'blur(4px)' }}>
-                        <div style={{ background: '#FFFFFF', padding: '2rem', borderRadius: '16px', width: '460px', maxHeight: '85vh', overflowY: 'auto', boxShadow: '0 20px 40px rgba(0,0,0,0.1)', border: '1px solid #E2E8F0' }}>
+                    <div className="gh-modal-overlay fade-up">
+                        <div className="gh-scrollbar" style={{ background: '#FFFFFF', padding: '2rem', borderRadius: '20px', width: '480px', maxHeight: '85vh', overflowY: 'auto', boxShadow: '0 24px 64px rgba(0,0,0,0.12)', border: '1px solid #E2E8F0', animation: 'gh-modal-enter 0.35s cubic-bezier(0.34, 1.56, 0.64, 1)' }}>
                             <h2 style={{ margin: '0 0 10px 0', color: '#1E293B', fontSize: '1.4rem', fontWeight: 800 }}>Dispatch {selectedAmbulance.name}</h2>
                             <p style={{ margin: '0 0 20px 0', color: '#64748B', fontSize: '0.9rem' }}>Ambulance ID: <span style={{ fontFamily: "'JetBrains Mono', monospace" }}>{selectedAmbulance.id}</span></p>
 
@@ -1439,10 +1447,11 @@ export default function OperatorDashboard() {
                             <label style={{ display: 'block', marginBottom: '0.5rem', fontSize: '0.8rem', fontWeight: 700, color: '#334155', textTransform: 'uppercase', letterSpacing: '0.05em' }}>Enter Patient Location</label>
                             <input
                                 type="text"
+                                className="gh-input"
                                 placeholder="E.g. 123 Main St, Near Central Park..."
                                 value={assignmentLocation}
                                 onChange={(e) => setAssignmentLocation(e.target.value)}
-                                style={{ width: '100%', padding: '0.8rem', borderRadius: '8px', border: '1.5px solid #E2E8F0', marginBottom: '1.5rem', outline: 'none', fontFamily: "'DM Sans', sans-serif" }}
+                                style={{ marginBottom: '1.5rem' }}
                             />
 
                             <div style={{ display: 'flex', gap: '1rem' }}>
@@ -1457,14 +1466,14 @@ export default function OperatorDashboard() {
                                             alert("Please enter a location to dispatch the ambulance.");
                                         }
                                     }}
-                                    className="action-btn"
-                                    style={{ flex: 1, padding: '0.8rem', background: '#E8571A', color: '#fff', border: 'none', borderRadius: '8px', fontWeight: 700, cursor: 'pointer', fontFamily: "'DM Sans', sans-serif" }}
+                                    className="gh-btn gh-btn-primary"
+                                    style={{ flex: 1 }}
                                 >
                                     Confirm Dispatch
                                 </button>
                                 <button
                                     onClick={() => setSelectedAmbulance(null)}
-                                    style={{ padding: '0.8rem 1.2rem', background: '#F1F5F9', color: '#64748B', border: 'none', borderRadius: '8px', fontWeight: 700, cursor: 'pointer', fontFamily: "'DM Sans', sans-serif" }}
+                                    className="gh-btn gh-btn-ghost"
                                 >
                                     Cancel
                                 </button>
@@ -1476,8 +1485,8 @@ export default function OperatorDashboard() {
 
                 {/* Search Ambulance Modal */}
                 {showSearchModal && (
-                    <div className="fade-up" style={{ position: 'fixed', inset: 0, zIndex: 100, display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'rgba(15, 23, 42, 0.4)', backdropFilter: 'blur(4px)' }}>
-                        <div style={{ background: '#FFFFFF', padding: '2rem', borderRadius: '16px', width: '480px', maxHeight: '85vh', overflowY: 'auto', boxShadow: '0 20px 50px rgba(0,0,0,0.15)', border: '1.5px solid #E2E8F0' }}>
+                    <div className="gh-modal-overlay fade-up">
+                        <div className="gh-scrollbar" style={{ background: '#FFFFFF', padding: '2rem', borderRadius: '20px', width: '500px', maxHeight: '85vh', overflowY: 'auto', boxShadow: '0 24px 64px rgba(0,0,0,0.15)', border: '1.5px solid #E2E8F0', animation: 'gh-modal-enter 0.35s cubic-bezier(0.34, 1.56, 0.64, 1)' }}>
 
                             {/* Header */}
                             <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '1.5rem' }}>
@@ -1509,29 +1518,30 @@ export default function OperatorDashboard() {
                                             <label style={{ display: 'block', marginBottom: '0.4rem', fontSize: '0.78rem', fontWeight: 700, color: '#334155', textTransform: 'uppercase' }}>Caller Name</label>
                                             <input
                                                 type="text"
+                                                className="gh-input"
                                                 placeholder="e.g. John Doe"
                                                 value={callerName}
                                                 onChange={(e) => setCallerName(e.target.value)}
-                                                style={{ width: '100%', padding: '0.75rem', borderRadius: '8px', border: '1.5px solid #E2E8F0', outline: 'none' }}
                                             />
                                         </div>
                                         <div>
                                             <label style={{ display: 'block', marginBottom: '0.4rem', fontSize: '0.78rem', fontWeight: 700, color: '#334155', textTransform: 'uppercase' }}>Caller Phone</label>
                                             <input
                                                 type="tel"
+                                                className="gh-input"
                                                 placeholder="+91 9876543210"
                                                 value={callerPhone}
                                                 onChange={(e) => setCallerPhone(e.target.value)}
-                                                style={{ width: '100%', padding: '0.75rem', borderRadius: '8px', border: '1.5px solid #E2E8F0', outline: 'none' }}
                                             />
                                         </div>
                                         <div>
                                             <label style={{ display: 'block', marginBottom: '0.4rem', fontSize: '0.78rem', fontWeight: 700, color: '#334155', textTransform: 'uppercase' }}>Emergency Details</label>
                                             <textarea
+                                                className="gh-input"
                                                 placeholder="e.g. Patient has chest pain, difficulty breathing, conscious..."
                                                 value={callDetails}
                                                 onChange={(e) => setCallDetails(e.target.value)}
-                                                style={{ width: '100%', padding: '0.75rem', borderRadius: '8px', border: '1.5px solid #E2E8F0', outline: 'none', fontFamily: "'DM Sans', sans-serif", minHeight: '80px', resize: 'none' }}
+                                                style={{ minHeight: '80px', resize: 'none' }}
                                             />
                                         </div>
 

@@ -72,21 +72,36 @@ export function useDirectionsRoute() {
                 routePoints,
             });
 
-        } catch (err: any) {
+        } catch (err: unknown) {
             console.error("[OSRM] Routing error:", err instanceof Error ? err.message : String(err));
 
-            // Fallback: Create direct path from origin to destination
+            // Fallback: Create direct path — estimate distance/duration from haversine
             console.log("[Fallback] Using direct path");
             const directRoutePoints: Location[] = [origin, destination];
-            const distanceKm = "~5.0";
-            const durationMins = "~10";
+
+            const R = 6371000;
+            const dLat = ((destination.lat - origin.lat) * Math.PI) / 180;
+            const dLng = ((destination.lng - origin.lng) * Math.PI) / 180;
+            const a =
+                Math.sin(dLat / 2) ** 2 +
+                Math.cos((origin.lat * Math.PI) / 180) *
+                Math.cos((destination.lat * Math.PI) / 180) *
+                Math.sin(dLng / 2) ** 2;
+            const estimatedDistM = Math.round(R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a)));
+            const estimatedDistKm = (estimatedDistM / 1000).toFixed(1);
+            // Assume ~30 km/h average speed through city for fallback
+            const estimatedDurationSecs = Math.round((estimatedDistM / 1000 / 30) * 3600);
+            const estimatedDurationMins = Math.max(1, Math.round(estimatedDurationSecs / 60));
+            const estimatedDurationText = estimatedDurationMins >= 60
+                ? `${Math.floor(estimatedDurationMins / 60)}h ${estimatedDurationMins % 60}m (est.)`
+                : `${estimatedDurationMins} mins (est.)`;
 
             setDirections(null);
             setRouteInfo({
-                distanceText: `${distanceKm} km (est.)`,
-                durationText: `${durationMins} mins (est.)`,
-                distanceValue: 5000,
-                durationValue: 600,
+                distanceText: `${estimatedDistKm} km (est.)`,
+                durationText: estimatedDurationText,
+                distanceValue: estimatedDistM,
+                durationValue: estimatedDurationSecs,
                 routePoints: directRoutePoints,
             });
 

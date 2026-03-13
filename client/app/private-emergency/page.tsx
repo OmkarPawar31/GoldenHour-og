@@ -19,6 +19,7 @@ import { useLocation } from "../../hooks/useLocation";
 import { useToast } from "../../hooks/useToast";
 import { useDispatchBroadcast } from "../../hooks/useDispatchBroadcast";
 import DashboardStats from "../../components/DashboardStats";
+import { CarFront, AlertTriangle, Square, Building2, Ambulance, Check, RotateCw } from "lucide-react";
 
 const MapView = dynamic(() => import("../../components/MapView"), { ssr: false });
 
@@ -243,6 +244,7 @@ export default function PrivateEmergencyDashboard() {
   const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const ambulanceRefresh = useRef<ReturnType<typeof setInterval> | null>(null);
   const socketRef = useRef<Socket | null>(null);
+  const ambulancePositionRef = useRef<{ lat: number; lng: number } | null>(null);
 
   // ─── Dispatch broadcast (same as ambulance page) ───
   const ambulanceId = useMemo(() => `PVT-${Date.now().toString(36).toUpperCase()}`, []);
@@ -356,14 +358,15 @@ export default function PrivateEmergencyDashboard() {
       addLog(`🚑 PHASE 2: En-Route to ${hospName}`, "success");
 
       try {
-        const routeData = await generateRoute(realGpsLocation, hospDest);
+        const startPos = ambulancePositionRef.current ?? realGpsLocation;
+        const routeData = await generateRoute(startPos, hospDest);
         setRoutePoints(routeData.path);
         setDirectionsResult(routeData.result);
         addLog(`Route to hospital: ${routeData.path.length} points`, "info");
 
         broadcastActivation({
-          lat: realGpsLocation.lat,
-          lng: realGpsLocation.lng,
+          lat: startPos.lat,
+          lng: startPos.lng,
           destination: { lat: hospDest.lat, lng: hospDest.lng, name: hospName },
           routePoints: routeData.path,
           currentLeg: 'patient-to-hospital',
@@ -398,6 +401,10 @@ export default function PrivateEmergencyDashboard() {
       }
     }
   });
+
+  useEffect(() => {
+    ambulancePositionRef.current = sim.ambulancePosition;
+  }, [sim.ambulancePosition]);
 
   // ─── Proximity Alert: same as ambulance page ───
   const proximityAlert = useAmbulanceProximityAlert(
@@ -687,7 +694,7 @@ export default function PrivateEmergencyDashboard() {
      RENDER
   ────────────────────────────────────────────────────── */
   return (
-    <div className="min-h-screen bg-[#020617] text-white flex flex-col overflow-hidden relative">
+    <div className="min-h-screen gh-bg-cream text-slate-800 flex flex-col overflow-hidden relative">
       <ToastUI />
       {/* Ambient background effects */}
       <div className="fixed inset-0 pointer-events-none z-0">
@@ -697,7 +704,7 @@ export default function PrivateEmergencyDashboard() {
       </div>
 
       {/* Top Header & Actions */}
-      <header className="border-b border-white/[0.04] bg-[#020617]/90 backdrop-blur-2xl px-6 py-3.5 z-50 shadow-2xl relative overflow-hidden">
+      <header className="border-b border-slate-200 bg-white/80 backdrop-blur-2xl px-6 py-3.5 z-50 shadow-sm relative overflow-hidden">
         <div className="absolute top-0 left-0 right-0 h-[2px] bg-gradient-to-r from-transparent via-blue-500/60 to-transparent" />
         <div className="absolute -bottom-6 left-1/2 -translate-x-1/2 w-[600px] h-[40px] bg-blue-500/[0.03] rounded-full blur-2xl pointer-events-none" />
 
@@ -707,7 +714,7 @@ export default function PrivateEmergencyDashboard() {
             <div className={`w-9 h-9 rounded-xl bg-blue-500/10 border border-blue-500/20 flex items-center justify-center transition-all duration-500 ${
               isEmergencyActive ? "shadow-[0_0_20px_rgba(59,130,246,0.4)] animate-pulse-glow" : "shadow-[0_0_12px_rgba(59,130,246,0.15)]"
             }`}>
-              <span className="text-lg">🚗</span>
+              <CarFront size={20} className="text-blue-500" />
             </div>
             <div className="flex flex-col">
               <h1 className="text-sm font-bold tracking-[0.2em] text-white uppercase whitespace-nowrap leading-tight">
@@ -749,7 +756,7 @@ export default function PrivateEmergencyDashboard() {
                 {!isLoaded ? (
                   <div className="w-3.5 h-3.5 border-2 border-white/30 border-t-white rounded-full animate-spin" />
                 ) : (
-                  <>🚨 Request Emergency Corridor</>
+                  <><AlertTriangle size={16} /> Request Emergency Corridor</>
                 )}
               </button>
             )}
@@ -761,9 +768,9 @@ export default function PrivateEmergencyDashboard() {
             {session === "active" && (
               <button
                 onClick={() => setShowConfirm(true)}
-                className="px-6 py-2.5 bg-gray-900/60 hover:bg-gray-800/80 text-gray-300 border border-gray-600/50 font-bold tracking-[0.15em] text-[11px] uppercase rounded-xl transition-all duration-300 whitespace-nowrap"
+                className="px-6 py-2.5 bg-gray-900/60 hover:bg-gray-800/80 text-gray-300 border border-gray-600/50 font-bold tracking-[0.15em] text-[11px] uppercase rounded-xl transition-all duration-300 whitespace-nowrap flex items-center gap-1.5"
               >
-                ⏹ Terminate
+                <Square size={14} className="fill-current" /> Terminate
               </button>
             )}
             <Link href="/" className="text-[10px] text-gray-500 hover:text-white uppercase font-bold tracking-widest transition-colors ml-2">Exit</Link>
@@ -786,10 +793,10 @@ export default function PrivateEmergencyDashboard() {
         {/* Middle/Bottom: Split View */}
         <div className="flex-1 flex flex-col lg:flex-row gap-5 min-h-0">
           {/* Main Map Area */}
-          <div className={`flex-[2] lg:flex-[3] rounded-2xl overflow-hidden shadow-[0_0_50px_rgba(0,0,0,0.4)] bg-[#0B1221] border relative transition-all duration-1000 ${
+          <div className={`flex-[2] lg:flex-[3] rounded-2xl overflow-hidden shadow-[0_2px_24px_rgba(0,0,0,0.06)] bg-white border relative transition-all duration-1000 ${
             isEmergencyActive
-              ? 'border-blue-500/30 shadow-[0_0_60px_rgba(59,130,246,0.15)] animate-border-glow'
-              : 'border-white/[0.06]'
+              ? 'border-blue-500/40 shadow-[0_0_40px_rgba(59,130,246,0.1)]'
+              : 'border-slate-200'
           }`}>
             {isLoaded ? (
               <MapView
@@ -798,6 +805,7 @@ export default function PrivateEmergencyDashboard() {
                 ambulancePosition={isEmergencyActive ? (sim.ambulancePosition || realGpsLocation) : null}
                 destination={destination}
                 destinationName={destinationName}
+                isDemoMode={demoMode}
                 routePoints={routePoints}
                 isEmergencyActive={isEmergencyActive}
                 bearing={sim.bearing}
@@ -832,7 +840,7 @@ export default function PrivateEmergencyDashboard() {
             <div className="flex items-center justify-between mb-1">
               <h2 className="text-white font-bold tracking-[0.15em] uppercase text-[11px] flex items-center gap-2">
                 <div className="w-6 h-6 rounded-lg bg-red-500/10 border border-red-500/20 flex items-center justify-center">
-                  <span className="text-xs">🏥</span>
+                  <Building2 size={14} className="text-red-500" />
                 </div>
                 Nearby Hospitals
                 {hospitals.length > 0 && (
@@ -855,7 +863,7 @@ export default function PrivateEmergencyDashboard() {
             {hospitals.length === 0 && !searchingHospitals && (
               <div className="flex flex-col items-center justify-center py-8 gap-3">
                 <div className="w-14 h-14 rounded-2xl bg-gray-800/50 border border-gray-700/30 flex items-center justify-center mb-1">
-                  <span className="text-2xl opacity-40">🏥</span>
+                  <Building2 size={24} className="text-gray-500 opacity-40" />
                 </div>
                 <p className="text-gray-500 text-sm text-center">
                   {hospitalsError || "No hospitals found nearby."}
@@ -866,9 +874,9 @@ export default function PrivateEmergencyDashboard() {
                 {origin && (
                   <button
                     onClick={() => resetAndRetry(mapInstance, origin)}
-                    className="mt-1 px-5 py-2 bg-blue-600/20 hover:bg-blue-600/30 text-blue-400 text-[11px] font-bold tracking-[0.15em] uppercase rounded-xl border border-blue-500/20 hover:border-blue-500/40 transition-all duration-300"
+                    className="mt-1 px-5 py-2 bg-blue-600/20 hover:bg-blue-600/30 text-blue-400 text-[11px] font-bold tracking-[0.15em] uppercase rounded-xl border border-blue-500/20 hover:border-blue-500/40 transition-all duration-300 flex items-center gap-1.5"
                   >
-                    ↻ Retry Search
+                    <RotateCw size={14} /> Retry Search
                   </button>
                 )}
               </div>
@@ -881,7 +889,7 @@ export default function PrivateEmergencyDashboard() {
                 <div className="flex items-center justify-between mb-1 mt-3">
                   <h2 className="text-white font-bold tracking-[0.15em] uppercase text-[11px] flex items-center gap-2">
                     <div className="w-6 h-6 rounded-lg bg-emerald-500/10 border border-emerald-500/20 flex items-center justify-center">
-                      <span className="text-xs">🚑</span>
+                      <Ambulance size={14} className="text-emerald-500" />
                     </div>
                     Nearby Ambulances
                     {nearbyAmbulances.length > 0 && (
@@ -919,7 +927,7 @@ export default function PrivateEmergencyDashboard() {
                     }`} />
                     <div className="flex justify-between items-center pl-2 relative z-10">
                       <div className="flex items-center gap-2.5">
-                        <span className="text-lg opacity-80">🚑</span>
+                        <Ambulance size={20} className="text-gray-400 opacity-80" />
                         <div>
                           <div className="text-xs font-mono font-bold text-white tracking-wider">{a.id}</div>
                           <div className="text-[10px] font-mono text-gray-400 mt-0.5">{a.distance} · {a.eta} AWAY</div>
@@ -950,7 +958,7 @@ export default function PrivateEmergencyDashboard() {
                 <div className="flex items-center justify-between mb-3 mt-3 p-3.5 rounded-xl bg-emerald-500/10 border border-emerald-500/20">
                   <h2 className="text-white font-bold tracking-[0.15em] uppercase text-[11px] flex items-center gap-2">
                     <div className="w-6 h-6 rounded-lg bg-emerald-500/20 border border-emerald-500/30 flex items-center justify-center">
-                      <span className="text-xs">✓</span>
+                      <Check size={14} className="text-emerald-400" />
                     </div>
                     Ambulance Booked
                   </h2>

@@ -1,6 +1,8 @@
 "use client";
 
 import { useState, useEffect, useRef, useCallback, useMemo } from "react";
+import gsap from "gsap";
+import { useGSAP } from "@gsap/react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { io, Socket } from "socket.io-client";
@@ -64,8 +66,16 @@ export default function HospitalDashboard() {
     const [requests, setRequests] = useState<Emergency[]>([]);
 
     // State for assigned ambulances from dispatch socket
-    const [assignedAmbulances, setAssignedAmbulances] = useState<any[]>([]);
-    const [approachingAlert, setApproachingAlert] = useState<any | null>(null);
+    interface AssignedAmbulance {
+        ambulanceId: string;
+        message: string;
+        patientName: string;
+        priority: string;
+        assignedAt: string;
+        ambulance?: any; // Live position data
+    }
+    const [assignedAmbulances, setAssignedAmbulances] = useState<AssignedAmbulance[]>([]);
+    const [approachingAlert, setApproachingAlert] = useState<AssignedAmbulance | null>(null);
 
     const mapRef = useRef<HTMLDivElement>(null);
     const mapObj = useRef<google.maps.Map | null>(null);
@@ -74,6 +84,25 @@ export default function HospitalDashboard() {
     const inboundRoutesRef = useRef<Map<string, google.maps.Polyline>>(new Map());
     const socketRef = useRef<Socket | null>(null);
     const dispatchSocketRef = useRef<Socket | null>(null);
+    const pageRef = useRef<HTMLDivElement>(null);
+
+    // GSAP entrance animations
+    useGSAP(() => {
+        if (!pageRef.current) return;
+        const tl = gsap.timeline({ defaults: { ease: 'power3.out' } });
+        tl.fromTo('.topbar',    { y: -20, autoAlpha: 0 }, { y: 0, autoAlpha: 1, duration: 0.5 })
+          .fromTo('.left-col', { x: -30, autoAlpha: 0 }, { x: 0, autoAlpha: 1, duration: 0.6 }, '-=0.3')
+          .fromTo('.right-col',{ x: 30,  autoAlpha: 0 }, { x: 0, autoAlpha: 1, duration: 0.6 }, '-=0.6');
+    }, { scope: pageRef });
+
+    // Animate fleet cards on update
+    useGSAP(() => {
+        if (fleet.length === 0) return;
+        gsap.fromTo('.fleet-card',
+          { y: 16, autoAlpha: 0 },
+          { y: 0, autoAlpha: 1, duration: 0.4, stagger: 0.07, ease: 'back.out(1.5)' }
+        );
+    }, { scope: pageRef, dependencies: [fleet.length, activeTab] });
 
     // ── Auth guard ──
     useEffect(() => {
@@ -182,7 +211,7 @@ export default function HospitalDashboard() {
             dispatchSocketRef.current?.emit("hospital:subscribe", { hospitalName: hospName });
         });
 
-        dispatchSocketRef.current.on("ambulance:assigned", (data: any) => {
+        dispatchSocketRef.current.on("ambulance:assigned", (data: AssignedAmbulance) => {
             console.log("[Hospital] Ambulance assigned:", data);
             
             // Add to assigned ambulances list
@@ -207,7 +236,7 @@ export default function HospitalDashboard() {
             showToast(`🚑 ${data.ambulanceId} is approaching your facility`, "success");
         });
 
-        dispatchSocketRef.current.on("ambulance:position", (data: any) => {
+        dispatchSocketRef.current.on("ambulance:position", (data: { ambulanceId: string; [key: string]: any }) => {
             // Update assigned ambulance position
             setAssignedAmbulances(prev =>
                 prev.map(a => a.ambulanceId === data.ambulanceId ? { ...a, ambulance: data } : a)
@@ -345,9 +374,9 @@ export default function HospitalDashboard() {
     };
 
     return (
-        <>
+        <div ref={pageRef}>
             <style>{`
-        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800;900&family=JetBrains+Mono:wght@400;500;600&display=swap');
+        /* Fonts moved to layout.tsx */
 
         *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
         html, body { height: 100%; overflow: hidden; }
@@ -1126,8 +1155,8 @@ export default function HospitalDashboard() {
                 </div>
             )}
 
-            {/* Toast */}
+             {/* Toast */}
             {toast && <div className={`toast ${toast.type}`}>{toast.msg}</div>}
-        </>
+        </div>
     );
 }

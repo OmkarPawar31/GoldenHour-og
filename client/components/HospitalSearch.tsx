@@ -2,6 +2,7 @@
 "use client";
 
 import { useEffect, useRef, useState, useCallback } from "react";
+import { Building2 } from "lucide-react";
 
 interface HospitalSearchProps {
   onHospitalSelect: (hospital: { lat: number; lng: number; name: string; address: string }) => void;
@@ -225,7 +226,7 @@ export default function HospitalSearch({ onHospitalSelect, isLoaded, currentLoca
     <div ref={containerRef} className="relative w-full z-40">
       {/* Search Input */}
       <div className="relative">
-        <div className="absolute left-3.5 top-1/2 -translate-y-1/2 text-gray-500">
+        <div className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400">
           <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
           </svg>
@@ -234,7 +235,7 @@ export default function HospitalSearch({ onHospitalSelect, isLoaded, currentLoca
         <input
           ref={inputRef}
           type="text"
-          placeholder="🏥 Search nearby hospitals..."
+          placeholder="Search nearby hospitals..."
           value={searchInput}
           onChange={(e) => handleSearchChange(e.target.value)}
           onFocus={() => {
@@ -243,12 +244,12 @@ export default function HospitalSearch({ onHospitalSelect, isLoaded, currentLoca
             }
           }}
           disabled={!isLoaded}
-          className="w-full pl-10 pr-4 py-2.5 bg-black/40 border border-white/[0.08] rounded-xl text-white placeholder-gray-500 focus:outline-none focus:border-cyan-500/50 focus:ring-1 focus:ring-cyan-500/20 transition-all disabled:opacity-50 disabled:cursor-not-allowed font-mono text-sm backdrop-blur-md shadow-[inset_0_1px_3px_rgba(0,0,0,0.3)]"
+          className="w-full pl-11 pr-4 py-3.5 bg-white border border-slate-200 rounded-2xl text-slate-800 placeholder-slate-400 focus:outline-none focus:border-blue-500/50 focus:ring-2 focus:ring-blue-500/20 transition-all disabled:opacity-50 disabled:cursor-not-allowed font-medium text-[13px] shadow-sm hover:shadow-md"
         />
 
         {isSearching && (
-          <div className="absolute right-3 top-1/2 -translate-y-1/2">
-            <div className="w-4 h-4 border-2 border-cyan-500/30 border-t-cyan-400 rounded-full animate-spin" />
+          <div className="absolute right-4 top-1/2 -translate-y-1/2">
+            <div className="w-4 h-4 border-2 border-blue-500/30 border-t-blue-500 rounded-full animate-spin" />
           </div>
         )}
 
@@ -263,36 +264,36 @@ export default function HospitalSearch({ onHospitalSelect, isLoaded, currentLoca
 
       {/* Dropdown */}
       {isOpen && (showNearby || showPredictions) && (
-        <div className="absolute top-full left-0 right-0 mt-2 bg-[#0c111d]/98 backdrop-blur-2xl border border-white/[0.08] rounded-xl shadow-[0_12px_48px_rgba(0,0,0,0.6),0_0_0_1px_rgba(255,255,255,0.03)] overflow-hidden animate-in fade-in slide-in-from-top-2 duration-200">
+        <div className="absolute top-full left-0 right-0 mt-2 bg-white/95 backdrop-blur-xl border border-slate-100 rounded-2xl shadow-xl overflow-hidden animate-in fade-in slide-in-from-top-2 duration-200 z-50">
           {/* Nearby hospitals section */}
           {showNearby && (
             <>
-              <div className="px-4 pt-3 pb-2 flex items-center gap-2">
-                <div className="w-1.5 h-1.5 rounded-full bg-cyan-400 animate-pulse" />
-                <span className="text-[10px] text-cyan-400/80 font-mono uppercase tracking-[0.2em] font-semibold">Nearby Hospitals</span>
-                {isLoadingNearby && <div className="w-3 h-3 border border-cyan-500/30 border-t-cyan-400 rounded-full animate-spin ml-auto" />}
+              <div className="px-4 pt-3 pb-2 flex items-center gap-2 bg-slate-50 border-b border-slate-100">
+                <div className="w-1.5 h-1.5 rounded-full bg-blue-500 animate-pulse" />
+                <span className="text-[10px] text-slate-500 uppercase tracking-[0.2em] font-bold">Nearby Hospitals</span>
+                {isLoadingNearby && <div className="w-3 h-3 border border-blue-500/30 border-t-blue-500 rounded-full animate-spin ml-auto" />}
               </div>
               <div className="max-h-72 overflow-y-auto">
                 {nearbyHospitals.map((hospital) => (
                   <button
                     key={hospital.place_id}
                     onClick={() => handleSelectNearby(hospital)}
-                    className="w-full px-4 py-3 text-left hover:bg-cyan-500/[0.08] border-b border-white/[0.04] last:border-b-0 transition-all group"
+                    className="w-full px-5 py-3.5 text-left hover:bg-slate-50 transition-all group"
                   >
                     <div className="flex items-start gap-3">
-                      <div className="mt-0.5 w-7 h-7 rounded-lg bg-red-500/10 border border-red-500/20 flex items-center justify-center shrink-0 group-hover:bg-red-500/20 transition-colors">
-                        <span className="text-xs">🏥</span>
+                      <div className="mt-0.5 w-7 h-7 rounded-lg bg-red-50 border border-red-100 flex items-center justify-center shrink-0 group-hover:bg-red-100 transition-colors">
+                        <Building2 size={16} className="text-red-600" />
                       </div>
                       <div className="flex-1 min-w-0">
-                        <p className="text-white text-sm font-mono group-hover:text-cyan-300 transition-colors truncate">
+                        <p className="text-slate-800 text-sm font-semibold group-hover:text-blue-600 transition-colors truncate">
                           {hospital.name}
                         </p>
-                        <p className="text-gray-500 text-xs font-mono truncate mt-0.5">
+                        <p className="text-slate-500 text-[11px] truncate mt-0.5">
                           {hospital.address}
                         </p>
                       </div>
                       {hospital.distance !== undefined && (
-                        <span className="text-[11px] font-mono text-cyan-500/80 bg-cyan-500/[0.08] px-2 py-0.5 rounded-full shrink-0 border border-cyan-500/10">
+                        <span className="text-[11px] font-bold text-blue-600 bg-blue-50 px-2.5 py-1 rounded-full shrink-0 border border-blue-100">
                           {hospital.distance < 1 ? `${Math.round(hospital.distance * 1000)}m` : `${hospital.distance.toFixed(1)}km`}
                         </span>
                       )}
@@ -306,27 +307,27 @@ export default function HospitalSearch({ onHospitalSelect, isLoaded, currentLoca
           {/* Search results section */}
           {showPredictions && (
             <>
-              <div className="px-4 pt-3 pb-2 flex items-center gap-2">
-                <div className="w-1.5 h-1.5 rounded-full bg-amber-400" />
-                <span className="text-[10px] text-amber-400/80 font-mono uppercase tracking-[0.2em] font-semibold">Search Results</span>
+              <div className="px-4 pt-3 pb-2 flex items-center gap-2 bg-slate-50 border-b border-slate-100">
+                <div className="w-1.5 h-1.5 rounded-full bg-amber-500" />
+                <span className="text-[10px] text-slate-500 uppercase tracking-[0.2em] font-bold">Search Results</span>
               </div>
               <div className="max-h-64 overflow-y-auto">
                 {predictions.map((prediction) => (
                   <button
                     key={prediction.place_id}
                     onClick={() => handleSelectPrediction(prediction)}
-                    className="w-full px-4 py-3 text-left hover:bg-cyan-500/[0.08] border-b border-white/[0.04] last:border-b-0 transition-all group"
+                    className="w-full px-5 py-3.5 text-left hover:bg-slate-50 transition-all group"
                   >
                     <div className="flex items-start gap-3">
-                      <div className="mt-0.5 w-7 h-7 rounded-lg bg-amber-500/10 border border-amber-500/20 flex items-center justify-center shrink-0 group-hover:bg-amber-500/20 transition-colors">
+                      <div className="mt-0.5 w-7 h-7 rounded-full bg-amber-50 border border-amber-100 flex items-center justify-center shrink-0 group-hover:bg-amber-100 transition-colors">
                         <span className="text-xs">📍</span>
                       </div>
-                      <div className="flex-1 min-w-0">
-                        <p className="text-white text-sm font-mono group-hover:text-cyan-300 transition-colors truncate">
+                      <div className="flex-1 min-w-0 flex flex-col justify-center">
+                        <p className="text-slate-800 text-sm font-semibold group-hover:text-blue-600 transition-colors truncate">
                           {prediction.name}
                         </p>
                         {prediction.address && (
-                          <p className="text-gray-500 text-xs font-mono truncate mt-0.5">
+                          <p className="text-slate-500 text-[11px] truncate mt-0.5">
                             {prediction.address}
                           </p>
                         )}
@@ -342,8 +343,8 @@ export default function HospitalSearch({ onHospitalSelect, isLoaded, currentLoca
 
       {/* No Results Message */}
       {isOpen && searchInput && predictions.length === 0 && !isSearching && (
-        <div className="absolute top-full left-0 right-0 mt-2 bg-[#0c111d]/98 backdrop-blur-2xl border border-white/[0.08] rounded-xl p-4 text-center animate-in fade-in slide-in-from-top-2 duration-200 shadow-[0_12px_48px_rgba(0,0,0,0.6)]">
-          <p className="text-gray-400 text-sm font-mono">
+        <div className="absolute top-full left-0 right-0 mt-2 bg-white backdrop-blur-xl border border-slate-200 rounded-xl p-4 text-center animate-in fade-in slide-in-from-top-2 duration-200 shadow-lg">
+          <p className="text-slate-500 text-sm font-medium">
             No hospitals found. Try a different search.
           </p>
         </div>

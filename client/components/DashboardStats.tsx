@@ -8,6 +8,7 @@ interface DashboardStatsProps {
   availableAmbulances: number;
   resolvedToday: number;
   greenSignalsActivated: number;
+  theme?: "dark" | "light";
 }
 
 // Simple CountUp animation hook
@@ -135,6 +136,7 @@ export default function DashboardStats({
   availableAmbulances,
   resolvedToday,
   greenSignalsActivated,
+  theme = "dark",
 }: DashboardStatsProps) {
   // Mount state to safely trigger animations instead of relying on inline opacity: 0
   const [mounted, setMounted] = useState(false);
@@ -154,120 +156,107 @@ export default function DashboardStats({
       label: "Active Emergencies",
       subtitle: "Currently dispatched",
       value: aeAnim,
-      icon: <span className="text-red-400"><AlertIcon /></span>,
+      icon: <span className="text-red-500"><AlertIcon /></span>,
       color: "#ef4444",
-      borderColor: "border-white/[0.08]",
-      hoverBorder: "hover:border-red-500/50",
-      bgGlow: "bg-red-500/10",
-      shadowColor: "rgba(239,68,68,0.1)",
-      iconBg: "bg-red-500/10",
-      iconBorder: "border-red-500/20",
+      borderColor: theme === "light" ? "border-slate-200" : "border-white/[0.08]",
+      hoverBorder: theme === "light" ? "hover:border-red-400" : "hover:border-red-500/50",
+      bgGlow: theme === "light" ? "bg-red-50" : "bg-red-500/10",
+      shadowColor: theme === "light" ? "rgba(239,68,68,0.05)" : "rgba(239,68,68,0.1)",
+      iconBg: theme === "light" ? "bg-red-50" : "bg-red-500/10",
+      iconBorder: theme === "light" ? "border-red-200" : "border-red-500/20",
       barPercent: activeEmergencies > 0 ? 100 : 0,
       trend: activeEmergencies > 0 ? "up" : "neutral",
-      trendColor: "text-red-400",
+      trendColor: "text-red-500",
     },
     {
       label: "Available Units",
       subtitle: "Ready for dispatch",
       value: aaAnim,
-      icon: <span className="text-blue-400"><AmbulanceIcon /></span>,
+      icon: <span className="text-blue-500"><AmbulanceIcon /></span>,
       color: "#3b82f6",
-      borderColor: "border-white/[0.08]",
-      hoverBorder: "hover:border-blue-500/50",
-      bgGlow: "bg-blue-500/10",
-      shadowColor: "rgba(59,130,246,0.1)",
-      iconBg: "bg-blue-500/10",
-      iconBorder: "border-blue-500/20",
+      borderColor: theme === "light" ? "border-slate-200" : "border-white/[0.08]",
+      hoverBorder: theme === "light" ? "hover:border-blue-400" : "hover:border-blue-500/50",
+      bgGlow: theme === "light" ? "bg-blue-50" : "bg-blue-500/10",
+      shadowColor: theme === "light" ? "rgba(59,130,246,0.05)" : "rgba(59,130,246,0.1)",
+      iconBg: theme === "light" ? "bg-blue-50" : "bg-blue-500/10",
+      iconBorder: theme === "light" ? "border-blue-200" : "border-blue-500/20",
       barPercent: Math.min((availableAmbulances / 50) * 100, 100),
       trend: "up",
-      trendColor: "text-blue-400",
+      trendColor: "text-blue-500",
     },
     {
       label: "Resolved Today",
       subtitle: "Successfully completed",
       value: rtAnim,
-      icon: <span className="text-purple-400"><CheckCircleIcon /></span>,
+      icon: <span className="text-purple-500"><CheckCircleIcon /></span>,
       color: "#a855f7",
-      borderColor: "border-white/[0.08]",
-      hoverBorder: "hover:border-purple-500/50",
-      bgGlow: "bg-purple-500/10",
-      shadowColor: "rgba(168,85,247,0.1)",
-      iconBg: "bg-purple-500/10",
-      iconBorder: "border-purple-500/20",
+      borderColor: theme === "light" ? "border-slate-200" : "border-white/[0.08]",
+      hoverBorder: theme === "light" ? "hover:border-purple-400" : "hover:border-purple-500/50",
+      bgGlow: theme === "light" ? "bg-purple-50" : "bg-purple-500/10",
+      shadowColor: theme === "light" ? "rgba(168,85,247,0.05)" : "rgba(168,85,247,0.1)",
+      iconBg: theme === "light" ? "bg-purple-50" : "bg-purple-500/10",
+      iconBorder: theme === "light" ? "border-purple-200" : "border-purple-500/20",
       barPercent: Math.min((resolvedToday / 20) * 100, 100),
       trend: "up",
-      trendColor: "text-purple-400",
+      trendColor: "text-purple-500",
     },
     {
       label: "Green Signals",
       subtitle: "Traffic cleared",
       value: gsAnim,
-      icon: <span className="text-[#00ff88]"><SignalIcon /></span>,
-      color: "#00ff88",
-      borderColor: "border-[#00ff88]/30",
-      hoverBorder: "hover:border-[#00ff88]/60",
-      bgGlow: "bg-[#00ff88]/15",
-      shadowColor: "rgba(0,255,136,0.15)",
-      iconBg: "bg-[#00ff88]/10",
-      iconBorder: "border-[#00ff88]/30",
+      icon: <span className="text-emerald-500"><SignalIcon /></span>,
+      color: "#10b981",
+      borderColor: theme === "light" ? "border-emerald-200" : "border-[#00ff88]/30",
+      hoverBorder: theme === "light" ? "hover:border-emerald-400" : "hover:border-[#00ff88]/60",
+      bgGlow: theme === "light" ? "bg-emerald-50" : "bg-[#00ff88]/15",
+      shadowColor: theme === "light" ? "rgba(16,185,129,0.05)" : "rgba(0,255,136,0.15)",
+      iconBg: theme === "light" ? "bg-emerald-50" : "bg-[#00ff88]/10",
+      iconBorder: theme === "light" ? "border-emerald-200" : "border-[#00ff88]/30",
       barPercent: greenSignalsActivated > 0 ? Math.min((greenSignalsActivated / 8) * 100, 100) : 0,
       isHighlighted: true,
       trend: greenSignalsActivated > 0 ? "up" : "neutral",
-      trendColor: "text-[#00ff88]",
+      trendColor: "text-emerald-500",
     },
   ];
 
   return (
-    <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 w-full">
+      <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 w-full">
       {cards.map((card, i) => (
         <div
           key={card.label}
-          className={`bg-[#0B1221]/90 backdrop-blur-2xl rounded-2xl border ${card.borderColor} p-5 flex flex-col relative overflow-hidden group hover:-translate-y-1 ${card.hoverBorder} shadow-lg transition-all duration-500 ${
+          className={`${theme === "light" ? "bg-white shadow-sm" : "bg-[#111827]/80 backdrop-blur-2xl shadow-md"} rounded-2xl border ${card.borderColor} p-5 flex flex-col relative overflow-hidden group hover:-translate-y-1 transition-all duration-300 ${
             mounted ? "animate-slide-up" : "opacity-0"
           }`}
           style={{
-            boxShadow: `0 4px 24px ${card.shadowColor}`,
             animationDelay: `${i * 80}ms`,
-            // Use --glow-color for the hover glow-pulse animation
-            "--glow-color": card.shadowColor,
           } as React.CSSProperties}
         >
-          {/* Shimmer overlay on hover */}
-          <div className="absolute inset-0 opacity-0 group-hover:opacity-100 transition-opacity duration-700 pointer-events-none overflow-hidden">
-            <div
-              className="absolute inset-0 animate-shimmer"
-              style={{
-                background: "linear-gradient(90deg, transparent, rgba(255,255,255,0.03), transparent)",
-              }}
-            />
-          </div>
+          {/* Subtle gradient overlay on hover instead of intense shimmer */}
+          <div className="absolute inset-0 opacity-0 group-hover:opacity-100 transition-opacity duration-500 pointer-events-none" style={{ background: `linear-gradient(135deg, transparent, ${card.shadowColor}, transparent)` }} />
 
-          {/* Background glow orb */}
-          <div className={`absolute top-0 right-0 w-28 h-28 ${card.bgGlow} rounded-full blur-3xl -translate-y-1/2 translate-x-1/3 group-hover:scale-125 transition-all duration-500 pointer-events-none`} />
+          {/* Background glow orb - made softer and static */}
+          <div className={`absolute top-0 right-0 w-32 h-32 ${card.bgGlow} rounded-full blur-[40px] opacity-40 -translate-y-1/2 translate-x-1/3 pointer-events-none`} />
 
           {/* Top row: Icon + Label */}
           <div className="flex items-center justify-between relative z-10 mb-3">
-            <div className="flex items-center gap-2">
-              <div className={`w-9 h-9 rounded-xl ${card.iconBg} border ${card.iconBorder} flex items-center justify-center transition-all duration-500 group-hover:scale-110 group-hover:animate-glow-pulse`}
-                style={{
-                  boxShadow: `0 0 12px ${card.shadowColor}`,
-                }}
+            <div className="flex items-center gap-3">
+              <div className={`w-8 h-8 rounded-xl ${card.iconBg} border ${card.iconBorder} flex items-center justify-center transition-all duration-300 group-hover:scale-105`}
               >
                 {card.icon}
               </div>
               <div className="flex flex-col">
-                <span className={`font-semibold text-[11px] tracking-widest uppercase ${card.isHighlighted ? "text-[#00ff88]/80" : "text-gray-400"}`}>
+                <span className={`font-bold text-[10px] tracking-widest uppercase ${card.isHighlighted ? (theme === "light" ? "text-emerald-600" : "text-[#00ff88]/80") : (theme === "light" ? "text-slate-600" : "text-gray-400")}`}>
                   {card.label}
                 </span>
-                <span className="text-[10px] text-gray-600 tracking-wide">{card.subtitle}</span>
+                <span className={`text-[9px] tracking-wide ${theme === "light" ? "text-slate-400" : "text-gray-600"}`}>{card.subtitle}</span>
               </div>
             </div>
           </div>
 
           {/* Stat value with trend arrow */}
-          <div className="relative z-10 flex items-baseline">
+          <div className="relative z-10 flex items-baseline outline-none focus:outline-none focus:bg-transparent -mt-1">
             <span
-              className={`text-3xl font-extrabold tracking-tight ${card.isHighlighted ? "text-[#00ff88]" : "text-white"}`}
+              className={`text-3xl font-extrabold tracking-tight block ${card.isHighlighted ? (theme === "light" ? "text-emerald-500" : "text-[#00ff88]") : (theme === "light" ? "text-slate-800" : "text-white")}`}
             >
               {card.value}
             </span>

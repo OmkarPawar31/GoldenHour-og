@@ -237,6 +237,18 @@ export default function AmbulancePage() {
   const activeEmergencies = isEmergencyActive ? 1 : 0;
   const greenSignalsActivated = isEmergencyActive ? 4 : 0;
 
+  // Refs for the latest values used inside the dispatch socket handler
+  // (avoids reconnecting the socket on every GPS update or hospital change)
+  const realGpsLocationRef = useRef(realGpsLocation);
+  const destinationRef = useRef(destination);
+  const destinationNameRef = useRef(destinationName);
+  useEffect(() => { realGpsLocationRef.current = realGpsLocation; }, [realGpsLocation]);
+  useEffect(() => { destinationRef.current = destination; }, [destination]);
+  useEffect(() => { destinationNameRef.current = destinationName; }, [destinationName]);
+
+  // Ref tracking the ambulance's last known simulated position for leg-2 routing
+  const lastAmbulancePosRef = useRef<{ lat: number; lng: number } | null>(null);
+
   // ─── Dispatch broadcast (real-time sync with operator dashboard) ───
   const ambulanceId = useMemo(() => `AMB-${Date.now().toString(36).toUpperCase()}`, []);
   const { broadcastActivation, broadcastPosition, broadcastDeactivation } = useDispatchBroadcast({
@@ -304,16 +316,14 @@ export default function AmbulancePage() {
       transports: ["websocket", "polling"],
     });
 
-    dispatchSocket.on("ambulance:dispatch", async (data: any) => {
-      // If it's specifically for this ambulance or a general broadcast we can take
+    dispatchSocket.on("ambulance:dispatch", async (data: { location?: { lat: number; lng: number }; patientName?: string }) => {
       console.log("[Ambulance] Received dispatch request:", data);
-      
       showToast(`🚨 DISPATCH: ${data.patientName || 'Emergency'} nearby!`, "error");
-      
+
       if (data.location) {
-        // Auto-activate for the patient location
         const patientLoc = data.location;
-        const depot = realGpsLocation; // Start from current location
+        // Use refs to get latest values without re-creating the socket
+        const depot = realGpsLocationRef.current;
         setAmbulanceDepot(depot);
         setCurrentLeg('depot-to-patient');
         setAmbulanceAtPatient(false);
@@ -323,11 +333,11 @@ export default function AmbulancePage() {
           const leg1Route = await generateRoute(depot, patientLoc);
           setRoutePoints(leg1Route.path);
           setDirectionsResult(leg1Route.result);
-          
+
           broadcastActivation({
             lat: depot.lat,
             lng: depot.lng,
-            destination: { lat: destination.lat, lng: destination.lng, name: destinationName },
+            destination: { lat: destinationRef.current.lat, lng: destinationRef.current.lng, name: destinationNameRef.current },
             routePoints: leg1Route.path,
             currentLeg: 'depot-to-patient',
           });
@@ -340,7 +350,8 @@ export default function AmbulancePage() {
     return () => {
       dispatchSocket.disconnect();
     };
-  }, [ambulanceId, showToast, realGpsLocation, destination, destinationName, broadcastActivation]);
+    // Socket only created once per ambulanceId — refs keep values current without reconnect
+  }, [ambulanceId, showToast, broadcastActivation]);
 
   // Fetch hospitals once when origin is ready
   useEffect(() => {
@@ -356,7 +367,9 @@ export default function AmbulancePage() {
       setAmbulanceAtPatient(true);
       setCurrentLeg('patient-to-hospital');
       try {
-        const routeData = await generateRoute(realGpsLocation, destination);
+        // Use the ambulance's actual end-of-leg-1 position (not the patient GPS fallback)
+        const legOrigin = lastAmbulancePosRef.current || realGpsLocation;
+        const routeData = await generateRoute(legOrigin, destinationRef.current);
         setRoutePoints(routeData.path);
         setDirectionsResult(routeData.result);
       } catch (err) {
@@ -366,7 +379,7 @@ export default function AmbulancePage() {
       showToast("🏥 Ambulance arrived at hospital! Patient delivered safely.", "success");
       setCurrentLeg('idle');
     }
-  }, [currentLeg, realGpsLocation, destination, showToast]);
+  }, [currentLeg, realGpsLocation, showToast]);
 
   const sim = useAmbulanceSimulation({
     routePoints,
@@ -377,7 +390,7 @@ export default function AmbulancePage() {
     onRecalculate: async (lat, lng) => {
       showToast("Recalculating route from new position...", "warning");
       try {
-        const recalcDest = currentLeg === 'depot-to-patient' ? realGpsLocation : destination;
+        const recalcDest = currentLeg === 'depot-to-patient' ? realGpsLocation : destinationRef.current;
         const routeData = await generateRoute({ lat, lng }, recalcDest);
         setRoutePoints(routeData.path);
         setDirectionsResult(routeData.result);
@@ -386,6 +399,13 @@ export default function AmbulancePage() {
       }
     }
   });
+
+  // Keep lastAmbulancePosRef in sync with sim position
+  useEffect(() => {
+    if (sim.ambulancePosition) {
+      lastAmbulancePosRef.current = sim.ambulancePosition;
+    }
+  }, [sim.ambulancePosition]);
 
   // ─── Proximity Alert: Detect when ambulance is near patient and show dummy cars ───
   const proximityAlert = useAmbulanceProximityAlert(
@@ -539,7 +559,7 @@ export default function AmbulancePage() {
   // ── GPS Acquiring Screen ──
   if (!origin && !gpsFallbackTriggered) {
     return (
-      <div className="min-h-screen bg-[#020617] flex flex-col items-center justify-center text-white relative overflow-hidden">
+      <div className="min-h-screen gh-bg-cream flex flex-col items-center justify-center text-slate-800 relative overflow-hidden">
         {/* Ambient orbs */}
         <div className="absolute top-1/4 left-1/3 w-[400px] h-[400px] bg-red-600/[0.04] rounded-full blur-[120px] animate-float" />
         <div className="absolute bottom-1/4 right-1/3 w-[300px] h-[300px] bg-blue-600/[0.04] rounded-full blur-[100px] animate-float" style={{ animationDelay: '2s' }} />
@@ -575,7 +595,7 @@ export default function AmbulancePage() {
 
   // ── Main Page ──
   return (
-    <div className="min-h-screen bg-[#020617] text-white flex flex-col overflow-hidden relative">
+    <div className="min-h-screen gh-bg-cream text-slate-800 flex flex-col overflow-hidden relative">
       {/* Ambient background effects */}
       <div className="fixed inset-0 pointer-events-none z-0">
         <div className="absolute top-0 left-1/4 w-[600px] h-[600px] bg-blue-600/[0.03] rounded-full blur-[120px] animate-float" style={{ animationDuration: '8s' }} />
@@ -594,7 +614,7 @@ export default function AmbulancePage() {
       <ToastNotifications toasts={toasts} dismissToast={dismissToast} />
 
       {/* Top Header & Actions */}
-      <header className="border-b border-white/[0.04] bg-[#020617]/90 backdrop-blur-2xl px-6 py-3.5 z-50 shadow-2xl relative overflow-hidden">
+      <header className="border-b border-slate-200 bg-white/80 backdrop-blur-2xl px-6 py-3.5 z-50 shadow-sm relative overflow-hidden">
         {/* Header gradient accent line */}
         <div className="absolute top-0 left-0 right-0 h-[2px] bg-gradient-to-r from-transparent via-red-500/60 to-transparent" />
         <div className="absolute -bottom-6 left-1/2 -translate-x-1/2 w-[600px] h-[40px] bg-red-500/[0.03] rounded-full blur-2xl pointer-events-none" />
@@ -608,7 +628,7 @@ export default function AmbulancePage() {
               <span className="text-lg">🚑</span>
             </div>
             <div className="flex flex-col">
-              <h1 className="text-sm font-bold tracking-[0.2em] text-white uppercase whitespace-nowrap leading-tight">
+              <h1 className="text-sm font-bold tracking-[0.2em] text-slate-800 uppercase whitespace-nowrap leading-tight">
                 GoldenHour
                 <span className="text-gray-600 font-light ml-2 text-xs">
                   DISPATCH
@@ -618,7 +638,7 @@ export default function AmbulancePage() {
                 {/* Live GPS indicator */}
                 <div className="flex items-center gap-1">
                   <div className={`w-1.5 h-1.5 rounded-full transition-colors duration-500 ${location ? 'bg-emerald-400 shadow-[0_0_6px_rgba(52,211,153,0.8)]' : 'bg-amber-400 animate-pulse'}`} />
-                  <span className="text-[9px] font-mono text-gray-500 tracking-wider uppercase">
+                  <span className="text-[9px] font-mono text-slate-500 tracking-wider uppercase">
                     {location ? 'GPS LIVE' : 'GPS ACQUIRING'}
                   </span>
                 </div>
@@ -665,7 +685,7 @@ export default function AmbulancePage() {
               <button
                 onClick={handleCancel}
                 disabled={searchingHospitals}
-                className="px-6 py-2.5 bg-gray-900/60 hover:bg-gray-800/80 disabled:opacity-50 text-gray-300 border border-gray-600/50 font-bold tracking-[0.15em] text-[11px] uppercase rounded-xl transition-all duration-300 whitespace-nowrap"
+                className="px-6 py-2.5 bg-slate-100 hover:bg-slate-200 disabled:opacity-50 text-slate-700 border border-slate-300 font-bold tracking-[0.15em] text-[11px] uppercase rounded-xl transition-all duration-300 whitespace-nowrap"
               >
                 ⏹ Terminate
               </button>
@@ -683,21 +703,22 @@ export default function AmbulancePage() {
             availableAmbulances={42}
             resolvedToday={12}
             greenSignalsActivated={greenSignalsActivated}
+            theme="light"
           />
         </div>
 
         {/* Middle/Bottom: Split View */}
         <div className="flex-1 flex flex-col lg:flex-row gap-5 min-h-0">
           {/* Main Map Area */}
-          <div className={`flex-[2] lg:flex-[3] rounded-2xl overflow-hidden shadow-[0_0_50px_rgba(0,0,0,0.4)] bg-[#0B1221] border relative transition-all duration-1000 ${
+          <div className={`flex-1 min-w-0 rounded-2xl overflow-hidden shadow-[0_4px_30px_rgba(0,0,0,0.06)] bg-white border relative transition-all duration-1000 ${
             isEmergencyActive
               ? 'border-red-500/30 shadow-[0_0_60px_rgba(239,68,68,0.15)] animate-border-glow'
-              : 'border-white/[0.06]'
+              : 'border-slate-200'
           }`}>
             {isLoaded ? (
               <MapView
                 origin={realGpsLocation}
-                ambulancePosition={sim.ambulancePosition || realGpsLocation}
+                ambulancePosition={isEmergencyActive ? (sim.ambulancePosition || realGpsLocation) : null}
                 destination={destination}
                 routePoints={routePoints}
                 routeInfo={routeInfo}
@@ -715,9 +736,10 @@ export default function AmbulancePage() {
                 ambulanceDepot={ambulanceDepot}
                 currentLeg={currentLeg}
                 dummyCars={dummyCars}
+                isDemoMode={demoMode}
               />
             ) : (
-              <div className="w-full h-full flex flex-col items-center justify-center bg-[#0B1221]">
+              <div className="w-full h-full flex flex-col items-center justify-center bg-slate-50">
                 <div className="relative">
                   <div className="w-14 h-14 border-[3px] border-[#2979FF]/15 border-t-[#2979FF] rounded-full animate-spin" />
                   <div className="absolute inset-1 w-12 h-12 border-[3px] border-transparent border-b-blue-400/25 rounded-full animate-spin" style={{ animationDirection: 'reverse', animationDuration: '1.8s' }} />
@@ -736,15 +758,15 @@ export default function AmbulancePage() {
           </div>
 
           {/* Right Panel: Hospital Cards */}
-          <div id="hospital-cards-panel" className="flex-[1] lg:w-[32%] lg:h-full overflow-y-auto dark-scroll p-5 flex flex-col gap-3.5 rounded-2xl border border-white/[0.06] bg-[#0B1221]/80 backdrop-blur-2xl shadow-2xl">
+          <div id="hospital-cards-panel" className="w-full lg:w-[420px] shrink-0 lg:h-full overflow-y-auto dark-scroll p-4 lg:p-5 flex flex-col gap-3.5 rounded-2xl border border-slate-200 bg-white shadow-xl">
             <div className="flex items-center justify-between mb-1">
-              <h2 className="text-white font-bold tracking-[0.15em] uppercase text-[11px] flex items-center gap-2">
+              <h2 className="text-slate-800 font-bold tracking-[0.15em] uppercase text-[11px] flex items-center gap-2">
                 <div className="w-6 h-6 rounded-lg bg-red-500/10 border border-red-500/20 flex items-center justify-center">
                   <span className="text-xs">🏥</span>
                 </div>
                 Nearby Hospitals
                 {hospitals.length > 0 && (
-                  <span className="text-[10px] text-gray-500 font-mono font-normal tracking-normal bg-white/[0.03] px-1.5 py-0.5 rounded">{hospitals.length}</span>
+                  <span className="text-[10px] text-slate-500 font-mono font-normal tracking-normal bg-slate-100 px-1.5 py-0.5 rounded">{hospitals.length}</span>
                 )}
               </h2>
               {searchingHospitals && <span className="w-3 h-3 border-2 border-blue-500/30 border-t-blue-500 rounded-full animate-spin"></span>}
@@ -762,7 +784,7 @@ export default function AmbulancePage() {
 
             {hospitals.length === 0 && !searchingHospitals && (
               <div className="flex flex-col items-center justify-center py-8 gap-3">
-                <div className="w-14 h-14 rounded-2xl bg-gray-800/50 border border-gray-700/30 flex items-center justify-center mb-1">
+                <div className="w-14 h-14 rounded-2xl bg-slate-100 border border-slate-200 flex items-center justify-center mb-1">
                   <span className="text-2xl opacity-40">🏥</span>
                 </div>
                 <p className="text-gray-500 text-sm text-center">

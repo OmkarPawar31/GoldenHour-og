@@ -1,6 +1,8 @@
 "use client";
 
 import { useState, useEffect, useRef, useCallback } from "react";
+import gsap from "gsap";
+import { useGSAP } from "@gsap/react";
 import Link from "next/link";
 import dynamic from "next/dynamic";
 import { io, Socket } from "socket.io-client";
@@ -158,6 +160,29 @@ export default function DriverDashboard() {
   const alertListRef = useRef<HTMLDivElement>(null);
   const socketRef = useRef<Socket | null>(null);
   const dispatchSocketRef = useRef<Socket | null>(null);
+  const pageRef = useRef<HTMLDivElement>(null);
+
+  // GSAP page entrance
+  useGSAP(() => {
+    if (!pageRef.current) return;
+    const tl = gsap.timeline({ defaults: { ease: 'power3.out' } });
+    tl.fromTo('.topbar',  { y: -20, autoAlpha: 0 }, { y: 0, autoAlpha: 1, duration: 0.5 })
+      .fromTo('.sidebar', { x: -30, autoAlpha: 0 }, { x: 0, autoAlpha: 1, duration: 0.6 }, '-=0.3')
+      .fromTo('.map-area',{ x: 20,  autoAlpha: 0 }, { x: 0, autoAlpha: 1, duration: 0.6 }, '-=0.6');
+  }, { scope: pageRef });
+
+  // Animate alert cards when they appear
+  useGSAP(() => {
+    if (alerts.length === 0) return;
+    const newAlerts = pageRef.current?.querySelectorAll('.alert-card:not([data-animated])');
+    newAlerts?.forEach((el) => {
+      (el as HTMLElement).dataset.animated = 'true';
+      gsap.fromTo(el,
+        { x: 60, autoAlpha: 0 },
+        { x: 0, autoAlpha: 1, duration: 0.45, ease: 'back.out(1.3)' }
+      );
+    });
+  }, { scope: pageRef, dependencies: [alerts] });
   const { speak } = useElevenLabsVoice();
   const speakRef = useRef(speak);
   speakRef.current = speak;
@@ -505,10 +530,10 @@ export default function DriverDashboard() {
   /* ──────────────────────────────────────────────────────
      RENDER
   ────────────────────────────────────────────────────── */
-  return (
-    <>
+      return (
+    <div ref={pageRef}>
       <style>{`
-        @import url('https://fonts.googleapis.com/css2?family=Bebas+Neue&family=DM+Sans:wght@300;400;500;700&family=JetBrains+Mono:wght@400;600&display=swap');
+        /* Fonts moved to layout.tsx */
 
         *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
 
@@ -739,19 +764,16 @@ export default function DriverDashboard() {
 
         .alert-card-full {
           position: relative; z-index: 1;
-          background: var(--navy);
-          border-radius: 18px; padding: 2.5rem 3rem;
-          max-width: 580px; width: 100%;
+          background: rgba(30, 41, 59, 0.95);
+          backdrop-filter: blur(16px);
+          border-radius: 24px; padding: 3rem;
+          max-width: 600px; width: 100%;
           text-align: center;
-          animation: alertSlideIn 0.4s ease-out;
+          animation: gh-modal-enter 0.5s cubic-bezier(0.34, 1.56, 0.64, 1) forwards;
+          box-shadow: 0 24px 64px rgba(0,0,0,0.4);
         }
-        .alert-card-full.ambulance { border: 2px solid rgba(255,68,68,0.5); box-shadow: 0 0 60px rgba(255,68,68,0.2); }
-        .alert-card-full.private { border: 2px solid rgba(255,179,71,0.5); box-shadow: 0 0 60px rgba(255,179,71,0.2); }
-
-        @keyframes alertSlideIn {
-          from { transform: translateY(40px) scale(0.95); opacity: 0; }
-          to   { transform: translateY(0) scale(1); opacity: 1; }
-        }
+        .alert-card-full.ambulance { border: 2px solid rgba(239,68,68,0.4); box-shadow: 0 0 80px rgba(239,68,68,0.2), inset 0 0 20px rgba(239,68,68,0.1); }
+        .alert-card-full.private { border: 2px solid rgba(245,158,11,0.4); box-shadow: 0 0 80px rgba(245,158,11,0.2), inset 0 0 20px rgba(245,158,11,0.1); }
 
         .alert-siren {
           font-size: 3.5rem; margin-bottom: 1rem;
@@ -1249,6 +1271,6 @@ export default function DriverDashboard() {
 
       {/* Hidden audio for future alert sounds */}
       <audio ref={alertSoundRef} preload="none" />
-    </>
+    </div>
   );
 }
