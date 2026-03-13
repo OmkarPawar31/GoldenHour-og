@@ -54,7 +54,7 @@ export default function Navbar() {
     gsap.fromTo(".gh-nav-logo", { y: -20, autoAlpha: 0 }, { y: 0, autoAlpha: 1, duration: 0.6, ease: "power3.out" });
     gsap.fromTo(".gh-nav-links > *", { y: -20, autoAlpha: 0 }, { y: 0, autoAlpha: 1, duration: 0.5, stagger: 0.05, ease: "power3.out", delay: 0.2 });
     gsap.fromTo(".gh-nav-right > *", { y: -20, autoAlpha: 0 }, { y: 0, autoAlpha: 1, duration: 0.5, stagger: 0.05, ease: "power3.out", delay: 0.2 });
-  }, { scope: navRef });
+  }, { scope: navRef, dependencies: [loggedIn, role, pathname] });
 
   const handleLogout = () => {
     clearAuth();

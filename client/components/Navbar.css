@@ -22,7 +22,6 @@
 
 /* ── Logo ── */
 .gh-nav-logo {
-  visibility: hidden;
   display: flex;
   align-items: center;
   gap: 0.55rem;
@@ -66,7 +65,6 @@
   margin: 0;
   padding: 0;
 }
-.gh-nav-links > * { visibility: hidden; }
 
 .gh-nav-links a {
   display: flex;
@@ -343,7 +341,6 @@
   align-items: center;
   gap: 0.5rem;
 }
-.gh-nav-right > * { visibility: hidden; }
 
 /* ── Mobile dropdown ── */
 .gh-nav-mobile-menu {

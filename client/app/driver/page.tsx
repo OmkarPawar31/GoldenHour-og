@@ -142,12 +142,12 @@ export default function DriverDashboard() {
 
   /* ── state ── */
   const [vehicleInfo, setVehicleInfo] = useState<VehicleInfo>({
-    plateNumber: "",
-    model: "",
-    color: "",
+    plateNumber: "MH-12-AB-1234",
+    model: "Maruti Swift",
+    color: "White",
     fuelType: "Petrol",
   });
-  const [infoSaved, setInfoSaved] = useState(false);
+  const [infoSaved, setInfoSaved] = useState(true);
   const [alerts, setAlerts] = useState<AlertEntry[]>([]);
   const [listening, setListening] = useState(false);
   const [connected, setConnected] = useState(false);
@@ -166,9 +166,9 @@ export default function DriverDashboard() {
   useGSAP(() => {
     if (!pageRef.current) return;
     const tl = gsap.timeline({ defaults: { ease: 'power3.out' } });
-    tl.fromTo('.topbar',  { y: -20, autoAlpha: 0 }, { y: 0, autoAlpha: 1, duration: 0.5 })
+    tl.fromTo('.topbar', { y: -20, autoAlpha: 0 }, { y: 0, autoAlpha: 1, duration: 0.5 })
       .fromTo('.sidebar', { x: -30, autoAlpha: 0 }, { x: 0, autoAlpha: 1, duration: 0.6 }, '-=0.3')
-      .fromTo('.map-area',{ x: 20,  autoAlpha: 0 }, { x: 0, autoAlpha: 1, duration: 0.6 }, '-=0.6');
+      .fromTo('.map-area', { x: 20, autoAlpha: 0 }, { x: 0, autoAlpha: 1, duration: 0.6 }, '-=0.6');
   }, { scope: pageRef });
 
   // Animate alert cards when they appear
@@ -204,7 +204,7 @@ export default function DriverDashboard() {
 
   // Track which ambulances we've already alerted for (cooldown)
   const alertedAmbulancesRef = useRef<Record<string, number>>({});
-  
+
   // App Language State
   const [appLang, setAppLang] = useState<"en" | "mr" | "hi">("en");
   const appLangRef = useRef<"en" | "mr" | "hi">("en");
@@ -530,7 +530,7 @@ export default function DriverDashboard() {
   /* ──────────────────────────────────────────────────────
      RENDER
   ────────────────────────────────────────────────────── */
-      return (
+  return (
     <div ref={pageRef}>
       <style>{`
         /* Fonts moved to layout.tsx */
@@ -972,8 +972,8 @@ export default function DriverDashboard() {
           )}
         </div>
         <div className="tb-right">
-          <select 
-            value={appLang} 
+          <select
+            value={appLang}
             onChange={(e) => setAppLang(e.target.value as "en" | "hi" | "mr")}
             style={{
               padding: "0.2rem 0.6rem", borderRadius: "5px", background: "rgba(255,255,255,0.1)", color: "#1E293B",
@@ -1252,7 +1252,7 @@ export default function DriverDashboard() {
 
           <div className="main-col-right">
             {isMapLoaded && driverGps ? (
-              <MapView 
+              <MapView
                 origin={driverGps}
                 ambulancePosition={activeAmbulance}
                 bearing={activeAmbulance?.bearing}
