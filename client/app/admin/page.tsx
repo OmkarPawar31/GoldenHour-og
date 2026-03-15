@@ -690,7 +690,7 @@ export default function AdminPage() {
             background: '#fff', color: 'var(--muted)', cursor: 'pointer',
             fontSize: '0.85rem', fontWeight: 600, fontFamily: 'DM Sans, sans-serif',
             transition: 'all 0.2s'
-          }}>
+          
             Logout
           </button>
         </header>
